@@ -48,5 +48,9 @@
         "vue": "^3.2.31",
         "vue-cropperjs": "^5.0.0",
         "vue-slicksort": "^2.0.5"
+    },
+    "dependencies": {
+        "laravel-echo": "^2.3.4",
+        "pusher-js": "^8.5.0"
     }
 }
