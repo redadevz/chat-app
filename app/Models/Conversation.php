@@ -104,17 +104,24 @@ class Conversation extends Model
             return $existing;
         }
 
-        $am = static::leastLoadedAccountManager();
+        $am = static::nextAccountManager();
 
         return $am ? static::findOrCreatePrivateBetween($client, $am->id) : null;
     }
 
 
-    private static function leastLoadedAccountManager(): ?CraftableProUser
+    private static function nextAccountManager(): ?CraftableProUser
     {
         return User::role('account-manager')
-            ->withCount('conversations')
-            ->orderBy('conversations_count')
+            ->select('craftable_pro_users.*')
+            ->selectSub(
+                DB::table('conversation_members')
+                    ->selectRaw('MAX(joined_at)')
+                    ->whereColumn('conversation_members.user_id', 'craftable_pro_users.id'),
+                'last_assigned_at',
+            )
+            ->orderBy('last_assigned_at')
+            ->orderBy('craftable_pro_users.id')
             ->first();
     }
 }
