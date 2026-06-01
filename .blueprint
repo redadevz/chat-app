@@ -1,0 +1,11 @@
+created:
+    - routes/api.php
+    - database/migrations/2026_05_22_110839_add_permissions_for_messages.php
+    - resources/js/craftable-pro/Pages/Message/Index.vue
+    - resources/js/craftable-pro/Pages/Message/Create.vue
+    - resources/js/craftable-pro/Pages/Message/Edit.vue
+    - resources/js/craftable-pro/Pages/Message/Form.vue
+    - resources/js/craftable-pro/Pages/Message/types.d.ts
+updated:
+    - routes/web.php
+    - resources/js/craftable-pro/Components/Sidebar.vue

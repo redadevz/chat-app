@@ -1,0 +1,34 @@
+craftable-pro:
+    models:
+        Conversation:
+            table: conversations
+            skip_model: false
+            columns:
+                id: id
+                created_by: 'id foreign nullable'
+                name: 'string nullable'
+                type: string
+                created_at: 'datetime nullable'
+                updated_at: 'datetime nullable'
+            listing:
+                id: 'sortable searchable'
+                created_by: 'sortable searchable'
+                name: 'sortable searchable'
+                type: 'sortable searchable'
+                created_at: sortable
+            form:
+                columns:
+                    -
+                        cards:
+                            -
+                                fields:
+                                    - created_by
+                                    - name
+                                    - type
+            translatable: {  }
+            publishable: null
+            media_collections: {  }
+            relationships: {  }
+            api: {  }
+            features:
+                - export

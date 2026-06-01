@@ -1,0 +1,74 @@
+craftable-pro:
+    models:
+        Message:
+            table: messages
+            skip_model: false
+            columns:
+                id: id
+                conversation_id: 'id foreign'
+                user_id: 'id foreign nullable'
+                reply_to_id: 'id foreign nullable'
+                body: 'text nullable'
+                type: string
+                created_at: 'datetime nullable'
+                updated_at: 'datetime nullable'
+            listing:
+                id: 'sortable searchable'
+                conversation_id: 'sortable searchable'
+                user_id: 'sortable searchable'
+                reply_to_id: 'sortable searchable'
+                body: 'sortable searchable'
+                type: 'sortable searchable'
+                created_at: sortable
+            form:
+                columns:
+                    -
+                        cards:
+                            -
+                                fields:
+                                    - conversation_id
+                                    - user_id
+                                    - reply_to_id
+                                    - body
+                                    - type
+            translatable: {  }
+            publishable: none
+            media_collections: {  }
+            relationships: {  }
+            api:
+                index:
+                    columns:
+                        - id
+                        - conversation_id
+                        - user_id
+                        - reply_to_id
+                        - body
+                        - type
+                        - created_at
+                        - updated_at
+                store:
+                    columns:
+                        - conversation_id
+                        - user_id
+                        - reply_to_id
+                        - body
+                        - type
+                update:
+                    columns:
+                        - conversation_id
+                        - user_id
+                        - reply_to_id
+                        - body
+                        - type
+                show:
+                    columns:
+                        - id
+                        - conversation_id
+                        - user_id
+                        - reply_to_id
+                        - body
+                        - type
+                        - created_at
+                        - updated_at
+                destroy: {  }
+            features: {  }
