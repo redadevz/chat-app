@@ -158,8 +158,25 @@ async function send() {
   if (!text || !conversationId.value || sending.value) return
   sending.value = true
   try {
-    await axios.post(route('chats.messages.store', conversationId.value), { body: text })
+    const { data } = await axios.post(
+      route('chats.messages.store', conversationId.value),
+      { body: text }
+    )
     body.value = ''
+
+    // Optimistically append the sent message so the client sees their own bubble.
+    // The broadcast uses ->toOthers() so the sender never receives it back.
+    const sent = data?.message ?? {
+      id: `local-${Date.now()}`,
+      body: text,
+      user_id: currentUserId.value,
+      created_at: new Date().toISOString(),
+    }
+    if (!messages.value.some((m) => m.id === sent.id)) {
+      messages.value.push(sent)
+      await nextTick()
+      scrollToBottom()
+    }
   } finally {
     sending.value = false
   }
@@ -175,18 +192,27 @@ let subscribedChannel = null
 
 function subscribe(id) {
   unsubscribe()
-  if (!id || !window.Echo) return
+  if (!id) return
+  if (!window.Echo) {
+    console.warn('[widget] Echo not available — realtime disabled')
+    return
+  }
   subscribedChannel = `conversation.${id}`
-  window.Echo.private(subscribedChannel).listen('.message.sent', async (e) => {
-    messages.value.push({
-      id: e.id,
-      body: e.body,
-      user_id: e.user_id,
-      created_at: e.created_at,
+  console.log('[widget] subscribing to private-' + subscribedChannel)
+  window.Echo.private(subscribedChannel)
+    .listen('.message.sent', async (e) => {
+      console.log('[widget] received message.sent', e)
+      if (messages.value.some((m) => m.id === e.id)) return
+      messages.value.push({
+        id: e.id,
+        body: e.body,
+        user_id: e.user_id,
+        created_at: e.created_at,
+      })
+      await nextTick()
+      scrollToBottom()
     })
-    await nextTick()
-    scrollToBottom()
-  })
+    .error((err) => console.error('[widget] channel error', err))
 }
 
 function unsubscribe() {

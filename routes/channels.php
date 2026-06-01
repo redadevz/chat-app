@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Broadcast;
 // Authenticate the broadcasting auth endpoint via the craftable-pro guard
 // (not the default web guard).
 Broadcast::routes([
-    'middleware' => ['craftable-pro-base-middlewares', 'craftable-pro-auth-middleware'],
+    'middleware' => ['web', 'craftable-pro-base-middlewares', 'craftable-pro-auth-middleware'],
 ]);
 
 Broadcast::channel('conversation.{conversationId}', function ($user, int $conversationId) {

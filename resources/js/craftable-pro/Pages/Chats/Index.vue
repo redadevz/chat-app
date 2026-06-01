@@ -122,11 +122,11 @@
       </header>
 
       <ul
-        v-if="active.messages?.length"
+        v-if="threadMessages.length"
         class="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4"
       >
         <li
-          v-for="m in active.messages"
+          v-for="m in threadMessages"
           :key="m.id"
           class="flex"
           :class="m.user_id === currentUserId ? 'justify-end' : 'justify-start'"
@@ -426,22 +426,38 @@ function startChat(userId) {
   )
 }
 
+const threadMessages = ref([])
+
+watch(
+  () => props.active?.messages,
+  (msgs) => { threadMessages.value = msgs ? [...msgs] : [] },
+  { immediate: true, deep: false }
+)
+
 let subscribedChannel = null
 
 function subscribe(id) {
   unsubscribe()
-  if (!id || !window.Echo) return
+  if (!id) return
+  if (!window.Echo) {
+    console.warn('[chat] Echo not available — realtime disabled')
+    return
+  }
   subscribedChannel = `conversation.${id}`
-  window.Echo.private(subscribedChannel).listen('.message.sent', (e) => {
-    if (!props.active || props.active.id !== id) return
-    props.active.messages.push({
-      id: e.id,
-      body: e.body,
-      user_id: e.user_id,
-      created_at: e.created_at,
-      sender: e.sender,
+  console.log('[chat] subscribing to private-' + subscribedChannel)
+  window.Echo.private(subscribedChannel)
+    .listen('.message.sent', (e) => {
+      console.log('[chat] received message.sent', e)
+      if (threadMessages.value.some((m) => m.id === e.id)) return
+      threadMessages.value.push({
+        id: e.id,
+        body: e.body,
+        user_id: e.user_id,
+        created_at: e.created_at,
+        sender: e.sender,
+      })
     })
-  })
+    .error((err) => console.error('[chat] channel error', err?.status, err?.type, err))
 }
 
 function unsubscribe() {

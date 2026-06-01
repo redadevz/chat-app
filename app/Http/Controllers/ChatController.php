@@ -45,7 +45,7 @@ class ChatController extends Controller
         return redirect()->route('chats.show', $conversation);
     }
 
-    public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse
+    public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse|\Illuminate\Http\JsonResponse
     {
         $message = $conversation->messages()->create([
             'user_id' => auth('craftable-pro')->id(),
@@ -56,6 +56,18 @@ class ChatController extends Controller
         $conversation->touch();
 
         broadcast(new MessageSent($message->load('sender')))->toOthers();
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'message' => [
+                    'id'         => $message->id,
+                    'body'       => $message->body,
+                    'user_id'    => $message->user_id,
+                    'created_at' => $message->created_at?->toIso8601String(),
+                    'conversation_id' => $message->conversation_id,
+                ],
+            ]);
+        }
 
         return redirect()->route('chats.show', $conversation);
     }
