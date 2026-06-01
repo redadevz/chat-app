@@ -94,7 +94,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import axios from 'axios'
 import { usePage } from '@inertiajs/vue3'
 import { ChatBubbleLeftRightIcon, XMarkIcon } from '@heroicons/vue/24/outline'
@@ -160,7 +160,6 @@ async function send() {
   try {
     await axios.post(route('chats.messages.store', conversationId.value), { body: text })
     body.value = ''
-    await load()
   } finally {
     sending.value = false
   }
@@ -171,4 +170,32 @@ function scrollToBottom() {
     scrollEl.value.scrollTop = scrollEl.value.scrollHeight
   }
 }
+
+let subscribedChannel = null
+
+function subscribe(id) {
+  unsubscribe()
+  if (!id || !window.Echo) return
+  subscribedChannel = `conversation.${id}`
+  window.Echo.private(subscribedChannel).listen('.message.sent', async (e) => {
+    messages.value.push({
+      id: e.id,
+      body: e.body,
+      user_id: e.user_id,
+      created_at: e.created_at,
+    })
+    await nextTick()
+    scrollToBottom()
+  })
+}
+
+function unsubscribe() {
+  if (subscribedChannel && window.Echo) {
+    window.Echo.leave(`private-${subscribedChannel}`)
+  }
+  subscribedChannel = null
+}
+
+watch(conversationId, (id) => subscribe(id))
+onBeforeUnmount(unsubscribe)
 </script>

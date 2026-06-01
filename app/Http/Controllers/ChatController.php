@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Events\MessageSent;
 use App\Http\Requests\Chat\StoreChatRequest;
 use App\Http\Requests\Chat\StoreMessageRequest;
 use App\Models\Conversation;
@@ -46,13 +47,15 @@ class ChatController extends Controller
 
     public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse
     {
-        $conversation->messages()->create([
+        $message = $conversation->messages()->create([
             'user_id' => auth('craftable-pro')->id(),
             'body'    => $request->validated('body'),
             'type'    => 'text',
         ]);
 
         $conversation->touch();
+
+        broadcast(new MessageSent($message->load('sender')))->toOthers();
 
         return redirect()->route('chats.show', $conversation);
     }

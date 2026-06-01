@@ -274,7 +274,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Head, usePage, router } from '@inertiajs/vue3'
 import dayjs from 'dayjs'
 import {
@@ -425,4 +425,32 @@ function startChat(userId) {
     }
   )
 }
+
+let subscribedChannel = null
+
+function subscribe(id) {
+  unsubscribe()
+  if (!id || !window.Echo) return
+  subscribedChannel = `conversation.${id}`
+  window.Echo.private(subscribedChannel).listen('.message.sent', (e) => {
+    if (!props.active || props.active.id !== id) return
+    props.active.messages.push({
+      id: e.id,
+      body: e.body,
+      user_id: e.user_id,
+      created_at: e.created_at,
+      sender: e.sender,
+    })
+  })
+}
+
+function unsubscribe() {
+  if (subscribedChannel && window.Echo) {
+    window.Echo.leave(`private-${subscribedChannel}`)
+  }
+  subscribedChannel = null
+}
+
+watch(activeId, (id) => subscribe(id), { immediate: true })
+onBeforeUnmount(unsubscribe)
 </script>

@@ -1,3 +1,4 @@
+import "../bootstrap";
 import { createApp, h } from "vue";
 import { Link, createInertiaApp } from "@inertiajs/vue3";
 import { Notification } from "craftable-pro/Components";
