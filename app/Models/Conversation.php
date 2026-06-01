@@ -92,21 +92,23 @@ class Conversation extends Model
 
     public static function supportFor(CraftableProUser $client): ?self
     {
-        $existing = static::query()
-            ->where('type', 'private')
-            ->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $client->id))
-            ->whereHas('members', fn (Builder $q) => $q->role('account-manager')
-                ->where('craftable_pro_users.id', '!=', $client->id))
-            ->has('members', '=', 2)
-            ->first();
+        return DB::transaction(function () use ($client) {
+            $existing = static::query()
+                ->where('type', 'private')
+                ->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $client->id))
+                ->whereHas('members', fn (Builder $q) => $q->role('account-manager')
+                    ->where('craftable_pro_users.id', '!=', $client->id))
+                ->has('members', '=', 2)
+                ->first();
 
-        if ($existing) {
-            return $existing;
-        }
+            if ($existing) {
+                return $existing;
+            }
 
-        $am = static::nextAccountManager();
+            $am = static::nextAccountManager();
 
-        return $am ? static::findOrCreatePrivateBetween($client, $am->id) : null;
+            return $am ? static::findOrCreatePrivateBetween($client, $am->id) : null;
+        });
     }
 
 
@@ -122,6 +124,7 @@ class Conversation extends Model
             )
             ->orderBy('last_assigned_at')
             ->orderBy('craftable_pro_users.id')
+            ->lockForUpdate()
             ->first();
     }
 }
