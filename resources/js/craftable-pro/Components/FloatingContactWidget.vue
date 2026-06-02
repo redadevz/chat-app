@@ -146,11 +146,13 @@ async function load() {
     supportUser.value = data.support_user
     messages.value = data.messages
     currentUserId.value = data.current_user_id
-    await nextTick()
-    scrollToBottom()
   } finally {
     loading.value = false
   }
+  // Wait until loading is false and the message list has actually rendered
+  // (it lives in a v-else block) before measuring scrollHeight.
+  await nextTick()
+  scrollToBottom()
 }
 
 async function send() {
@@ -223,5 +225,16 @@ function unsubscribe() {
 }
 
 watch(conversationId, (id) => subscribe(id))
+
+// Keep the thread pinned to the latest message whenever the count changes
+// (load, optimistic send, or realtime push) while the widget is open.
+watch(
+  () => messages.value.length,
+  () => {
+    if (open.value) nextTick(scrollToBottom)
+  },
+  { flush: 'post' }
+)
+
 onBeforeUnmount(unsubscribe)
 </script>

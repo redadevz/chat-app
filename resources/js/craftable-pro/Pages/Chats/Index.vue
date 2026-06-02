@@ -1,7 +1,7 @@
 <template>
   <Head :title="$t('craftable-pro', 'Messages')" />
 
-  <div class="flex h-full flex-1 overflow-hidden bg-[#1e1f22] text-gray-100">
+  <div class="flex h-[100dvh] flex-1 overflow-hidden bg-[#1e1f22] text-gray-100">
     <aside class="flex w-72 flex-shrink-0 flex-col border-r border-black/30 bg-[#2b2d31]">
       <div
         class="flex items-center justify-between border-b border-black/30 px-4 py-3 shadow-sm"
@@ -123,6 +123,7 @@
 
       <ul
         v-if="threadMessages.length"
+        ref="scrollEl"
         class="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4"
       >
         <li
@@ -274,7 +275,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { Head, usePage, router } from '@inertiajs/vue3'
 import dayjs from 'dayjs'
 import {
@@ -427,12 +428,27 @@ function startChat(userId) {
 }
 
 const threadMessages = ref([])
+const scrollEl = ref(null)
+
+function scrollToBottom() {
+  if (scrollEl.value) {
+    scrollEl.value.scrollTop = scrollEl.value.scrollHeight
+  }
+}
 
 watch(
   () => props.active?.messages,
   (msgs) => { threadMessages.value = msgs ? [...msgs] : [] },
   { immediate: true, deep: false }
 )
+
+watch(
+  () => threadMessages.value.length,
+  () => nextTick(scrollToBottom),
+  { flush: 'post' }
+)
+
+watch(activeId, () => nextTick(scrollToBottom))
 
 let subscribedChannel = null
 
