@@ -1,7 +1,7 @@
 <template>
   <Head :title="$t('craftable-pro', 'Messages')" />
 
-  <div class="flex h-[100dvh] flex-1 overflow-hidden bg-[#1e1f22] text-gray-100">
+  <div class="flex h-screen overflow-hidden bg-[#1e1f22] text-gray-100">
     <aside class="flex w-72 flex-shrink-0 flex-col border-r border-black/30 bg-[#2b2d31]">
       <div
         class="flex items-center justify-between border-b border-black/30 px-4 py-3 shadow-sm"
