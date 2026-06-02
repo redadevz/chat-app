@@ -3,8 +3,7 @@
 use App\Models\Conversation;
 use Illuminate\Support\Facades\Broadcast;
 
-// Authenticate the broadcasting auth endpoint via the craftable-pro guard
-// (not the default web guard).
+
 Broadcast::routes([
     'middleware' => ['web', 'craftable-pro-base-middlewares', 'craftable-pro-auth-middleware'],
 ]);
