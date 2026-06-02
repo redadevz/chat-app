@@ -100,7 +100,7 @@
 
     <section
       v-if="active"
-      class="flex flex-1 flex-col overflow-hidden"
+      class="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
       <header
         class="flex items-center gap-3 border-b border-black/30 px-4 py-3 shadow-sm"
@@ -124,7 +124,7 @@
       <ul
         v-if="threadMessages.length"
         ref="scrollEl"
-        class="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-4"
+        class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-4"
       >
         <li
           v-for="m in threadMessages"
