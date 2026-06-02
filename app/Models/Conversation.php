@@ -115,6 +115,7 @@ class Conversation extends Model
     private static function nextAccountManager(): ?CraftableProUser
     {
         return User::role('account-manager')
+            ->whereNull('craftable_pro_users.deleted_at')
             ->select('craftable_pro_users.*')
             ->selectSub(
                 DB::table('conversation_members')
