@@ -4,7 +4,19 @@ import vue from "@vitejs/plugin-vue";
 import { resolve } from "path";
 import tailwindcss from "tailwindcss";
 
+// In Docker, Vite must bind to 0.0.0.0 and tell the browser to reach the
+// HMR websocket at localhost (the mapped port). Outside Docker this block is
+// inert, so host-based `npm run craftable-pro:dev` is unchanged.
+const inDocker = process.env.DOCKER === "true";
+
 export default defineConfig({
+  ...(inDocker && {
+    server: {
+      host: "0.0.0.0",
+      port: 5173,
+      hmr: { host: "localhost" },
+    },
+  }),
   plugins: [
     splitVendorChunkPlugin(),
     laravel({

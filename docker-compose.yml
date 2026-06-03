@@ -1,0 +1,41 @@
+# Local development stack for the chat app.
+# - app:  PHP 8.4 serving Laravel on :8000
+# - node: Vite dev server (HMR) for the Craftable PRO admin/chat UI on :5173
+#
+# SQLite lives in the bind-mounted ./database, so there is no DB container.
+# Pusher is a hosted service (configured via PUSHER_* in .env) — nothing to run here.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    # Run as your host user so sqlite/storage/vendor files aren't root-owned.
+    user: "1000:1000"
+    environment:
+      # Composer needs a writable HOME when not running as root.
+      COMPOSER_HOME: /tmp/composer
+    volumes:
+      # Bind-mount the source for live editing — host vendor/ is reused.
+      - .:/var/www/html
+    env_file:
+      - .env
+    # @vite in Blade emits URLs to the node service's dev server (localhost:5173);
+    # the browser loads assets from there during development.
+    command: ["php", "artisan", "serve", "--host=0.0.0.0", "--port=8000"]
+
+  node:
+    image: node:20
+    working_dir: /var/www/html
+    # The node image's built-in user is UID 1000 — keeps node_modules host-owned.
+    user: "node"
+    ports:
+      - "5173:5173"
+    environment:
+      # Activates the Docker server/HMR block in craftable-pro.vite.config.js.
+      DOCKER: "true"
+    volumes:
+      - .:/var/www/html
+    # Install deps on first run, then start Vite (binds 0.0.0.0 via the config).
+    command: sh -c "npm install && npm run craftable-pro:dev"
