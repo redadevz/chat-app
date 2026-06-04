@@ -22,13 +22,24 @@ class ChatController extends Controller
         $user = auth('craftable-pro')->user();
 
         // Clients use the floating popup only — they shouldn't see the full chat page.
-        abort_if($user->roles->pluck('name')->contains('client'), 403);
+        abort_if($this->isClient($user), 403);
 
         return $this->render();
     }
 
     public function show(Conversation $conversation): Response
     {
+        $user = auth('craftable-pro')->user();
+
+        // Clients never use the full chat page (it would expose internal notes).
+        abort_if($this->isClient($user), 403);
+
+        // Super-admins oversee every conversation. Join on first open so the
+        // existing membership-based auth and realtime channels just work.
+        if ($this->isSuperAdmin($user) && ! $this->isMember($conversation, $user->id)) {
+            $conversation->members()->attach($user->id, ['joined_at' => now()]);
+        }
+
         $this->ensureMember($conversation);
         $this->markAsRead($conversation);
 
@@ -47,10 +58,20 @@ class ChatController extends Controller
 
     public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse|\Illuminate\Http\JsonResponse
     {
+        $user = auth('craftable-pro')->user();
+
+        // Only staff may post an internal (staff-only) note; anyone else is
+        // forced back to a public message the client can see.
+        $visibility = $request->validated('visibility', config('chat.visibility.default'));
+        if ($visibility === config('chat.visibility.internal') && ! $this->isStaff($user)) {
+            $visibility = config('chat.visibility.public');
+        }
+
         $message = $conversation->messages()->create([
-            'user_id' => auth('craftable-pro')->id(),
-            'body'    => $request->validated('body'),
-            'type'    => 'text',
+            'user_id'    => $user->id,
+            'body'       => $request->validated('body'),
+            'type'       => config('chat.messages.default_type'),
+            'visibility' => $visibility,
         ]);
 
         $conversation->touch();
@@ -63,6 +84,7 @@ class ChatController extends Controller
                     'id'         => $message->id,
                     'body'       => $message->body,
                     'user_id'    => $message->user_id,
+                    'visibility' => $message->visibility,
                     'created_at' => $message->created_at?->toIso8601String(),
                     'conversation_id' => $message->conversation_id,
                 ],
@@ -87,7 +109,12 @@ class ChatController extends Controller
 
     private function conversationsListFor(CraftableProUser $user)
     {
-        return Conversation::forUser($user)
+
+        $query = $this->isSuperAdmin($user)
+            ? Conversation::query()
+            : Conversation::forUser($user);
+
+        return $query
             ->with([
                 'latestMessage',
                 'members:id,first_name,last_name',
@@ -139,6 +166,7 @@ class ChatController extends Controller
                     'id'         => $m->id,
                     'body'       => $m->body,
                     'user_id'    => $m->user_id,
+                    'visibility' => $m->visibility,
                     'created_at' => $m->created_at?->toIso8601String(),
                     'sender'     => $m->sender ? [
                         'id'         => $m->sender->id,
@@ -170,7 +198,7 @@ class ChatController extends Controller
     public function support(): \Illuminate\Http\JsonResponse
     {
         $user = auth('craftable-pro')->user();
-        abort_unless($user->roles->pluck('name')->contains('client'), 403);
+        abort_unless($this->isClient($user), 403);
 
         $conversation = Conversation::supportFor($user);
 
@@ -180,7 +208,10 @@ class ChatController extends Controller
 
         $this->markAsRead($conversation);
 
+        // The client must only ever see their account manager as the single
+        // point of contact — never a super-admin who joined to oversee.
         $supportUser = $conversation->members()
+            ->role(config('chat.roles.account_manager'))
             ->where('craftable_pro_users.id', '!=', $user->id)
             ->select('craftable_pro_users.id', 'first_name', 'last_name')
             ->first();
@@ -190,6 +221,7 @@ class ChatController extends Controller
             'support_user'    => $supportUser?->only(['id', 'first_name', 'last_name']),
             'current_user_id' => $user->id,
             'messages'        => $conversation->messages()
+                ->public()
                 ->with('sender:id,first_name,last_name')
                 ->oldest()
                 ->get()
@@ -205,10 +237,30 @@ class ChatController extends Controller
     private function ensureMember(Conversation $conversation): void
     {
         $userId = auth('craftable-pro')->id();
-        abort_unless(
-            $conversation->members()->where('craftable_pro_users.id', $userId)->exists(),
-            403,
-        );
+        abort_unless($this->isMember($conversation, $userId), 403);
+    }
+
+    private function isMember(Conversation $conversation, int $userId): bool
+    {
+        return $conversation->members()->where('craftable_pro_users.id', $userId)->exists();
+    }
+
+    private function isClient(CraftableProUser $user): bool
+    {
+        return $user->roles->pluck('name')->contains(config('chat.roles.client'));
+    }
+
+    private function isSuperAdmin(CraftableProUser $user): bool
+    {
+        return $user->roles->pluck('name')->contains(config('chat.roles.super_admin'));
+    }
+
+    /** Staff = the roles allowed to post and read internal notes. */
+    private function isStaff(CraftableProUser $user): bool
+    {
+        return $user->roles->pluck('name')
+            ->intersect(config('chat.roles.staff'))
+            ->isNotEmpty();
     }
 
     

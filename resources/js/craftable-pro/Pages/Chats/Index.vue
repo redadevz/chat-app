@@ -135,11 +135,26 @@
           <div
             class="max-w-[70%] rounded-2xl px-3 py-2 text-sm"
             :class="
-              m.user_id === currentUserId
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white/10 text-gray-100'
+              m.visibility === 'internal'
+                ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/40'
+                : m.user_id === currentUserId
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white/10 text-gray-100'
             "
           >
+            <p
+              v-if="m.visibility === 'internal'"
+              class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300"
+            >
+              <LockClosedIcon class="h-3 w-3" />
+              {{ $t('craftable-pro', 'Internal · staff only') }}
+            </p>
+            <p
+              v-if="m.user_id !== currentUserId"
+              class="mb-0.5 text-[11px] font-semibold opacity-80"
+            >
+              {{ senderName(m) }}
+            </p>
             <p class="whitespace-pre-wrap break-words">{{ m.body }}</p>
             <p class="mt-1 text-right text-[10px] opacity-60">
               {{ formatTime(m.created_at) }}
@@ -155,23 +170,77 @@
       </div>
 
       <form
-        class="flex items-end gap-2 border-t border-black/30 px-4 py-3"
+        class="flex flex-col gap-2 border-t border-black/30 px-4 py-3"
         @submit.prevent="sendMessage"
       >
-        <textarea
-          v-model="messageBody"
-          rows="1"
-          :placeholder="$t('craftable-pro', 'Type a message')"
-          class="flex-1 resize-none rounded-md bg-[#1e1f22] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500/60"
-          @keydown.enter.exact.prevent="sendMessage"
-        />
-        <button
-          type="submit"
-          class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
-          :disabled="!messageBody.trim()"
-        >
-          {{ $t('craftable-pro', 'Send') }}
-        </button>
+        <div v-if="isStaff" class="flex items-center gap-2">
+          <div class="inline-flex rounded-md bg-[#1e1f22] p-0.5 text-xs">
+            <button
+              type="button"
+              class="flex items-center gap-1 rounded px-2.5 py-1 font-medium transition"
+              :class="
+                composeMode === 'public'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200'
+              "
+              @click="composeMode = 'public'"
+            >
+              <GlobeAltIcon class="h-3.5 w-3.5" />
+              {{ $t('craftable-pro', 'Public') }}
+            </button>
+            <button
+              type="button"
+              class="flex items-center gap-1 rounded px-2.5 py-1 font-medium transition"
+              :class="
+                composeMode === 'internal'
+                  ? 'bg-amber-500 text-black'
+                  : 'text-gray-400 hover:text-gray-200'
+              "
+              @click="composeMode = 'internal'"
+            >
+              <LockClosedIcon class="h-3.5 w-3.5" />
+              {{ $t('craftable-pro', 'Private') }}
+            </button>
+          </div>
+          <span class="text-[11px] text-gray-500">
+            {{
+              composeMode === 'internal'
+                ? $t('craftable-pro', 'Only staff can see this — hidden from the client.')
+                : $t('craftable-pro', 'The client can see this message.')
+            }}
+          </span>
+        </div>
+
+        <div class="flex items-end gap-2">
+          <textarea
+            v-model="messageBody"
+            rows="1"
+            :placeholder="
+              composeMode === 'internal'
+                ? $t('craftable-pro', 'Write an internal note…')
+                : $t('craftable-pro', 'Type a message')
+            "
+            class="flex-1 resize-none rounded-md bg-[#1e1f22] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1"
+            :class="
+              composeMode === 'internal'
+                ? 'ring-1 ring-amber-500/40 focus:ring-amber-500/60'
+                : 'focus:ring-indigo-500/60'
+            "
+            @keydown.enter.exact.prevent="sendMessage"
+          />
+          <button
+            type="submit"
+            class="rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
+            :class="
+              composeMode === 'internal'
+                ? 'bg-amber-500 text-black hover:bg-amber-400'
+                : 'bg-indigo-600 text-white hover:bg-indigo-500'
+            "
+            :disabled="!messageBody.trim()"
+          >
+            {{ $t('craftable-pro', 'Send') }}
+          </button>
+        </div>
       </form>
     </section>
 
@@ -283,6 +352,8 @@ import {
   MagnifyingGlassIcon,
   ChatBubbleLeftRightIcon,
   XMarkIcon,
+  LockClosedIcon,
+  GlobeAltIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
@@ -294,10 +365,17 @@ const props = defineProps({
 const page = usePage()
 const currentUserId = computed(() => page.props.auth?.user?.id)
 const isClient = computed(() => (page.props.auth?.roles ?? []).includes('client'))
+const isStaff = computed(() => {
+  const roles = page.props.auth?.roles ?? []
+  return roles.includes('super-admin') || roles.includes('account-manager')
+})
 
 const search = ref('')
 const activeId = computed(() => props.active?.id ?? null)
 const messageBody = ref('')
+// 'public'  → the client can see the message
+// 'internal' → staff-only note (account-manager ↔ super-admin)
+const composeMode = ref('public')
 
 const activeTitle = computed(() => {
   if (!props.active) return ''
@@ -340,7 +418,7 @@ function sendMessage() {
   if (!body || !props.active) return
   router.post(
     route('chats.messages.store', props.active.id),
-    { body },
+    { body, visibility: isStaff.value ? composeMode.value : 'public' },
     {
       preserveScroll: true,
       onSuccess: () => {
@@ -387,6 +465,14 @@ function initialsFor(conv) {
       .map((p) => p[0]?.toUpperCase() ?? '')
       .join('') || '?'
   )
+}
+
+function senderName(m) {
+  if (m.sender) {
+    const name = `${m.sender.first_name ?? ''} ${m.sender.last_name ?? ''}`.trim()
+    if (name) return name
+  }
+  return `#${m.user_id}`
 }
 
 function formatTime(dateStr) {
@@ -451,6 +537,19 @@ watch(
 watch(activeId, () => nextTick(scrollToBottom))
 
 let subscribedChannel = null
+let internalChannel = null
+
+function pushMessage(e) {
+  if (threadMessages.value.some((m) => m.id === e.id)) return
+  threadMessages.value.push({
+    id: e.id,
+    body: e.body,
+    user_id: e.user_id,
+    visibility: e.visibility ?? 'public',
+    created_at: e.created_at,
+    sender: e.sender,
+  })
+}
 
 function subscribe(id) {
   unsubscribe()
@@ -464,25 +563,37 @@ function subscribe(id) {
   window.Echo.private(subscribedChannel)
     .listen('.message.sent', (e) => {
       console.log('[chat] received message.sent', e)
-      if (threadMessages.value.some((m) => m.id === e.id)) return
-      threadMessages.value.push({
-        id: e.id,
-        body: e.body,
-        user_id: e.user_id,
-        created_at: e.created_at,
-        sender: e.sender,
-      })
+      pushMessage(e)
     })
     .error((err) => console.error('[chat] channel error', err?.status, err?.type, err))
+
+  // Staff also listen on the internal channel for staff-only notes. Clients
+  // are rejected by the channel authorization, so they never reach this.
+  if (isStaff.value) {
+    internalChannel = `conversation.${id}.internal`
+    window.Echo.private(internalChannel)
+      .listen('.message.sent', (e) => {
+        console.log('[chat] received internal message.sent', e)
+        pushMessage(e)
+      })
+      .error((err) => console.error('[chat] internal channel error', err?.status, err?.type, err))
+  }
 }
 
 function unsubscribe() {
   if (subscribedChannel && window.Echo) {
     window.Echo.leave(`private-${subscribedChannel}`)
   }
+  if (internalChannel && window.Echo) {
+    window.Echo.leave(`private-${internalChannel}`)
+  }
   subscribedChannel = null
+  internalChannel = null
 }
 
-watch(activeId, (id) => subscribe(id), { immediate: true })
+watch(activeId, (id) => {
+  composeMode.value = 'public'
+  subscribe(id)
+}, { immediate: true })
 onBeforeUnmount(unsubscribe)
 </script>

@@ -6,6 +6,7 @@ namespace App\Http\Requests\Chat;
 
 use App\Models\Conversation;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreMessageRequest extends FormRequest
 {
@@ -22,7 +23,8 @@ class StoreMessageRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'body' => ['required', 'string', 'max:5000'],
+            'body'       => ['required', 'string', 'max:'.config('chat.messages.max_length')],
+            'visibility' => ['sometimes', Rule::in(config('chat.visibility.all'))],
         ];
     }
 }

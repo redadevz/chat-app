@@ -5,6 +5,7 @@
 namespace App\Models;
 
 use Brackets\CraftablePro\Models\CraftableProUser;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -31,6 +32,7 @@ class Message extends Model
         'reply_to_id',
         'body',
         'type',
+        'visibility',
     ];
 
     /**
@@ -46,6 +48,17 @@ class Message extends Model
         'user_id' => 'integer',
         'reply_to_id' => 'integer',
     ];
+    }
+
+    /** Only messages the client is allowed to see. */
+    public function scopePublic(Builder $query): Builder
+    {
+        return $query->where('visibility', config('chat.visibility.public'));
+    }
+
+    public function isInternal(): bool
+    {
+        return $this->visibility === config('chat.visibility.internal');
     }
 
     public function conversation(): BelongsTo

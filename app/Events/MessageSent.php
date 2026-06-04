@@ -25,8 +25,13 @@ class MessageSent implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
+        // Internal (staff-only) notes ride a separate channel that clients are
+        // not allowed to subscribe to, so they can never receive them.
+        $prefix = config('chat.channels.prefix');
+        $suffix = $this->message->isInternal() ? config('chat.channels.internal_suffix') : '';
+
         return [
-            new PrivateChannel("conversation.{$this->message->conversation_id}"),
+            new PrivateChannel("{$prefix}.{$this->message->conversation_id}{$suffix}"),
         ];
     }
 
@@ -49,6 +54,7 @@ class MessageSent implements ShouldBroadcastNow
             'id'         => $this->message->id,
             'body'       => $this->message->body,
             'user_id'    => $this->message->user_id,
+            'visibility' => $this->message->visibility,
             'created_at' => $this->message->created_at?->toIso8601String(),
             'conversation_id' => $this->message->conversation_id,
             'sender'     => $this->message->sender ? [

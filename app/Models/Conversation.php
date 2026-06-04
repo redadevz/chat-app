@@ -93,12 +93,14 @@ class Conversation extends Model
     public static function supportFor(CraftableProUser $client): ?self
     {
         return DB::transaction(function () use ($client) {
+            // The support thread is the private conversation that has both this
+            // client and an account-manager. We intentionally do NOT require
+            // exactly 2 members: a super-admin may have joined to oversee it.
             $existing = static::query()
                 ->where('type', 'private')
                 ->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $client->id))
-                ->whereHas('members', fn (Builder $q) => $q->role('account-manager')
+                ->whereHas('members', fn (Builder $q) => $q->role(config('chat.roles.account_manager'))
                     ->where('craftable_pro_users.id', '!=', $client->id))
-                ->has('members', '=', 2)
                 ->first();
 
             if ($existing) {
@@ -114,7 +116,7 @@ class Conversation extends Model
 
     private static function nextAccountManager(): ?CraftableProUser
     {
-        return User::role('account-manager')
+        return User::role(config('chat.roles.account_manager'))
             ->whereNull('craftable_pro_users.deleted_at')
             ->select('craftable_pro_users.*')
             ->selectSub(
