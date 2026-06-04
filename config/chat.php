@@ -1,5 +1,17 @@
 <?php
 
+/*
+| The "staff" role set and the "all visibilities" list are derived from the
+| individual values below so they can't drift out of sync. Staff can still be
+| overridden explicitly with a comma-separated CHAT_ROLES_STAFF.
+*/
+
+$superAdmin     = env('CHAT_ROLE_SUPER_ADMIN', 'super-admin');
+$accountManager = env('CHAT_ROLE_ACCOUNT_MANAGER', 'account-manager');
+
+$publicVisibility   = env('CHAT_VISIBILITY_PUBLIC', 'public');
+$internalVisibility = env('CHAT_VISIBILITY_INTERNAL', 'internal');
+
 return [
 
     /*
@@ -11,11 +23,14 @@ return [
     */
 
     'roles' => [
-        'client'          => 'client',
-        'super_admin'     => 'super-admin',
-        'account_manager' => 'account-manager',
+        'client'          => env('CHAT_ROLE_CLIENT', 'client'),
+        'super_admin'     => $superAdmin,
+        'account_manager' => $accountManager,
 
-        'staff' => ['super-admin', 'account-manager'],
+        'staff' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', env('CHAT_ROLES_STAFF', "{$superAdmin},{$accountManager}")),
+        ))),
     ],
 
     /*
@@ -27,10 +42,10 @@ return [
     */
 
     'visibility' => [
-        'public'   => 'public',
-        'internal' => 'internal',
-        'default'  => 'public',
-        'all'      => ['public', 'internal'],
+        'public'   => $publicVisibility,
+        'internal' => $internalVisibility,
+        'default'  => env('CHAT_VISIBILITY_DEFAULT', $publicVisibility),
+        'all'      => [$publicVisibility, $internalVisibility],
     ],
 
     /*
@@ -42,8 +57,8 @@ return [
     */
 
     'channels' => [
-        'prefix'          => 'conversation',
-        'internal_suffix' => '.internal',
+        'prefix'          => env('CHAT_CHANNEL_PREFIX', 'conversation'),
+        'internal_suffix' => env('CHAT_CHANNEL_INTERNAL_SUFFIX', '.internal'),
     ],
 
     /*
@@ -53,8 +68,8 @@ return [
     */
 
     'messages' => [
-        'max_length'   => 5000,
-        'default_type' => 'text',
+        'max_length'   => (int) env('CHAT_MESSAGE_MAX_LENGTH', 5000),
+        'default_type' => env('CHAT_MESSAGE_DEFAULT_TYPE', 'text'),
     ],
 
 ];
