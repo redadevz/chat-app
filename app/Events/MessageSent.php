@@ -51,16 +51,37 @@ class MessageSent implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
-            'id'         => $this->message->id,
-            'body'       => $this->message->body,
-            'user_id'    => $this->message->user_id,
-            'visibility' => $this->message->visibility,
-            'created_at' => $this->message->created_at?->toIso8601String(),
+            'id'          => $this->message->id,
+            'body'        => $this->message->body,
+            'user_id'     => $this->message->user_id,
+            'visibility'  => $this->message->visibility,
+            'reply_to_id' => $this->message->reply_to_id,
+            'reply_to'    => $this->replyToPayload(),
+            'created_at'  => $this->message->created_at?->toIso8601String(),
             'conversation_id' => $this->message->conversation_id,
-            'sender'     => $this->message->sender ? [
+            'sender'      => $this->message->sender ? [
                 'id'         => $this->message->sender->id,
                 'first_name' => $this->message->sender->first_name,
                 'last_name'  => $this->message->sender->last_name,
+            ] : null,
+        ];
+    }
+
+    /** A compact snapshot of the message this one replies to, for inline quoting. */
+    private function replyToPayload(): ?array
+    {
+        $parent = $this->message->replyTo;
+
+        if (! $parent) {
+            return null;
+        }
+
+        return [
+            'id'     => $parent->id,
+            'body'   => $parent->body,
+            'sender' => $parent->sender ? [
+                'first_name' => $parent->sender->first_name,
+                'last_name'  => $parent->sender->last_name,
             ] : null,
         ];
     }

@@ -22,9 +22,18 @@ class StoreMessageRequest extends FormRequest
 
     public function rules(): array
     {
+        $conversation = $this->route('conversation');
+
         return [
-            'body'       => ['required', 'string', 'max:'.config('chat.messages.max_length')],
-            'visibility' => ['sometimes', Rule::in(config('chat.visibility.all'))],
+            'body'        => ['required', 'string', 'max:'.config('chat.messages.max_length')],
+            'visibility'  => ['sometimes', Rule::in(config('chat.visibility.all'))],
+            // A reply may only point at a message in the same conversation.
+            'reply_to_id' => [
+                'sometimes', 'nullable', 'integer',
+                Rule::exists('messages', 'id')->where(
+                    fn ($q) => $q->where('conversation_id', $conversation?->id),
+                ),
+            ],
         ];
     }
 }

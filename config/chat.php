@@ -6,6 +6,7 @@
 | overridden explicitly with a comma-separated CHAT_ROLES_STAFF.
 */
 
+$admin          = env('CHAT_ROLE_ADMIN', 'Administrator');
 $superAdmin     = env('CHAT_ROLE_SUPER_ADMIN', 'super-admin');
 $accountManager = env('CHAT_ROLE_ACCOUNT_MANAGER', 'account-manager');
 
@@ -24,12 +25,20 @@ return [
 
     'roles' => [
         'client'          => env('CHAT_ROLE_CLIENT', 'client'),
+        'admin'           => $admin,
         'super_admin'     => $superAdmin,
         'account_manager' => $accountManager,
 
+        // Roles allowed to post/read internal notes (incl. private replies).
         'staff' => array_values(array_filter(array_map(
             'trim',
-            explode(',', env('CHAT_ROLES_STAFF', "{$superAdmin},{$accountManager}")),
+            explode(',', env('CHAT_ROLES_STAFF', "{$admin},{$superAdmin},{$accountManager}")),
+        ))),
+
+        // Roles that oversee every conversation (see all + auto-join on open).
+        'oversight' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', env('CHAT_ROLES_OVERSIGHT', "{$superAdmin},{$admin}")),
         ))),
     ],
 

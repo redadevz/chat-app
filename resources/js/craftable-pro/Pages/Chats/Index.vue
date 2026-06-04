@@ -102,6 +102,12 @@
       v-if="active"
       class="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
+      <!-- Click-away layer that closes any open ⋮ message menu. -->
+      <div
+        v-if="openMenuId !== null"
+        class="fixed inset-0 z-10"
+        @click="openMenuId = null"
+      />
       <header
         class="flex items-center gap-3 border-b border-black/30 px-4 py-3 shadow-sm"
       >
@@ -129,25 +135,61 @@
         <li
           v-for="m in threadMessages"
           :key="m.id"
-          class="flex"
+          class="group flex items-center gap-1"
           :class="m.user_id === currentUserId ? 'justify-end' : 'justify-start'"
         >
+          <!-- Administrator-only ⋮ menu: reply privately to this message. -->
+          <div v-if="isAdmin" class="relative flex-shrink-0">
+            <button
+              type="button"
+              class="rounded p-1 text-gray-500 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
+              :class="openMenuId === m.id ? 'opacity-100' : ''"
+              :title="$t('craftable-pro', 'More')"
+              @click="toggleMenu(m.id)"
+            >
+              <EllipsisVerticalIcon class="h-4 w-4" />
+            </button>
+            <div
+              v-if="openMenuId === m.id"
+              class="absolute z-20 mt-1 w-44 overflow-hidden rounded-md bg-[#2b2d31] shadow-xl shadow-black/60 ring-1 ring-black/40"
+              :class="m.user_id === currentUserId ? 'right-0' : 'left-0'"
+            >
+              <button
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-white/10"
+                @click="startPrivateReply(m)"
+              >
+                <LockClosedIcon class="h-3.5 w-3.5" :style="{ color: internalColor }" />
+                {{ $t('craftable-pro', 'Reply privately') }}
+              </button>
+            </div>
+          </div>
+
           <div
             class="max-w-[70%] rounded-2xl px-3 py-2 text-sm"
             :class="
-              m.visibility === 'internal'
-                ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/40'
-                : m.user_id === currentUserId
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white/10 text-gray-100'
+              m.visibility !== 'internal' && m.user_id !== currentUserId
+                ? 'bg-white/10 text-gray-100'
+                : ''
             "
+            :style="bubbleStyle(m)"
           >
+            <!-- Quoted message this is a private reply to. -->
+            <div
+              v-if="m.reply_to"
+              class="mb-1 rounded border-l-2 bg-black/20 px-2 py-1 text-[11px] opacity-80"
+              :style="{ borderColor: mix(internalColor, 60) }"
+            >
+              <span class="font-semibold">{{ quotedName(m.reply_to) || $t('craftable-pro', 'message') }}</span>
+              <span class="opacity-70"> · {{ truncate(m.reply_to.body) }}</span>
+            </div>
             <p
               v-if="m.visibility === 'internal'"
-              class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300"
+              class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide"
+              :style="{ color: internalColor }"
             >
               <LockClosedIcon class="h-3 w-3" />
-              {{ $t('craftable-pro', 'Internal · staff only') }}
+              {{ m.reply_to ? $t('craftable-pro', 'Private reply · staff only') : $t('craftable-pro', 'Internal · staff only') }}
             </p>
             <p
               v-if="m.user_id !== currentUserId"
@@ -173,16 +215,38 @@
         class="flex flex-col gap-2 border-t border-black/30 px-4 py-3"
         @submit.prevent="sendMessage"
       >
+        <div
+          v-if="replyingTo"
+          class="flex items-center gap-2 rounded-md border-l-2 px-3 py-1.5 text-[11px]"
+          :style="{
+            borderColor: mix(internalColor, 60),
+            backgroundColor: mix(internalColor, 10),
+            color: mix(internalColor, 35, 'white'),
+          }"
+        >
+          <LockClosedIcon class="h-3.5 w-3.5 flex-shrink-0" :style="{ color: internalColor }" />
+          <span class="min-w-0 flex-1 truncate">
+            {{ $t('craftable-pro', 'Replying privately to') }}
+            <span class="font-semibold">{{ senderName(replyingTo) }}</span>
+            <span class="opacity-70"> · {{ truncate(replyingTo.body, 60) }}</span>
+          </span>
+          <button
+            type="button"
+            class="flex-shrink-0 rounded p-0.5 text-amber-200 transition hover:bg-white/10 hover:text-white"
+            :title="$t('craftable-pro', 'Cancel reply')"
+            @click="cancelReply"
+          >
+            <XMarkIcon class="h-3.5 w-3.5" />
+          </button>
+        </div>
+
         <div v-if="isStaff" class="flex items-center gap-2">
           <div class="inline-flex rounded-md bg-[#1e1f22] p-0.5 text-xs">
             <button
               type="button"
               class="flex items-center gap-1 rounded px-2.5 py-1 font-medium transition"
-              :class="
-                composeMode === 'public'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-gray-400 hover:text-gray-200'
-              "
+              :class="composeMode === 'public' ? 'text-white' : 'text-gray-400 hover:text-gray-200'"
+              :style="composeMode === 'public' ? { backgroundColor: publicColor } : {}"
               @click="composeMode = 'public'"
             >
               <GlobeAltIcon class="h-3.5 w-3.5" />
@@ -191,11 +255,8 @@
             <button
               type="button"
               class="flex items-center gap-1 rounded px-2.5 py-1 font-medium transition"
-              :class="
-                composeMode === 'internal'
-                  ? 'bg-amber-500 text-black'
-                  : 'text-gray-400 hover:text-gray-200'
-              "
+              :class="composeMode === 'internal' ? 'text-black' : 'text-gray-400 hover:text-gray-200'"
+              :style="composeMode === 'internal' ? { backgroundColor: internalColor } : {}"
               @click="composeMode = 'internal'"
             >
               <LockClosedIcon class="h-3.5 w-3.5" />
@@ -220,22 +281,19 @@
                 ? $t('craftable-pro', 'Write an internal note…')
                 : $t('craftable-pro', 'Type a message')
             "
-            class="flex-1 resize-none rounded-md bg-[#1e1f22] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1"
-            :class="
+            class="flex-1 resize-none rounded-md bg-[#1e1f22] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none"
+            :style="
               composeMode === 'internal'
-                ? 'ring-1 ring-amber-500/40 focus:ring-amber-500/60'
-                : 'focus:ring-indigo-500/60'
+                ? { boxShadow: `inset 0 0 0 1px ${mix(internalColor, 40)}` }
+                : {}
             "
             @keydown.enter.exact.prevent="sendMessage"
           />
           <button
             type="submit"
             class="rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
-            :class="
-              composeMode === 'internal'
-                ? 'bg-amber-500 text-black hover:bg-amber-400'
-                : 'bg-indigo-600 text-white hover:bg-indigo-500'
-            "
+            :class="composeMode === 'internal' ? 'text-black' : 'text-white'"
+            :style="{ backgroundColor: composeMode === 'internal' ? internalColor : publicColor }"
             :disabled="!messageBody.trim()"
           >
             {{ $t('craftable-pro', 'Send') }}
@@ -354,6 +412,7 @@ import {
   XMarkIcon,
   LockClosedIcon,
   GlobeAltIcon,
+  EllipsisVerticalIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
@@ -367,15 +426,50 @@ const currentUserId = computed(() => page.props.auth?.user?.id)
 const isClient = computed(() => (page.props.auth?.roles ?? []).includes('client'))
 const isStaff = computed(() => {
   const roles = page.props.auth?.roles ?? []
-  return roles.includes('super-admin') || roles.includes('account-manager')
+  return (
+    roles.includes('Administrator') ||
+    roles.includes('super-admin') ||
+    roles.includes('account-manager')
+  )
 })
+// Only the Administrator can start a private reply to a specific message.
+const isAdmin = computed(() => (page.props.auth?.roles ?? []).includes('Administrator'))
 
 const search = ref('')
 const activeId = computed(() => props.active?.id ?? null)
 const messageBody = ref('')
 // 'public'  → the client can see the message
-// 'internal' → staff-only note (account-manager ↔ super-admin)
+// 'internal' → staff-only note (staff ↔ staff, hidden from the client)
 const composeMode = ref('public')
+// When set, the next message is a private reply quoting this message.
+const replyingTo = ref(null)
+// Id of the message whose ⋮ menu is currently open (null = none).
+const openMenuId = ref(null)
+
+// Configurable colors (managed in the "Chat appearance" settings page).
+const publicColor = computed(
+  () => page.props.settings?.chat?.public_color || '#4f46e5'
+)
+const internalColor = computed(
+  () => page.props.settings?.chat?.internal_color || '#f59e0b'
+)
+function mix(color, pct, other = 'transparent') {
+  return `color-mix(in srgb, ${color} ${pct}%, ${other})`
+}
+// Background/text/ring for a message bubble, derived from the configured colors.
+function bubbleStyle(m) {
+  if (m.visibility === 'internal') {
+    return {
+      backgroundColor: mix(internalColor.value, 15),
+      color: mix(internalColor.value, 35, 'white'),
+      boxShadow: `inset 0 0 0 1px ${mix(internalColor.value, 40)}`,
+    }
+  }
+  if (m.user_id === currentUserId.value) {
+    return { backgroundColor: publicColor.value, color: '#fff' }
+  }
+  return {}
+}
 
 const activeTitle = computed(() => {
   if (!props.active) return ''
@@ -418,14 +512,35 @@ function sendMessage() {
   if (!body || !props.active) return
   router.post(
     route('chats.messages.store', props.active.id),
-    { body, visibility: isStaff.value ? composeMode.value : 'public' },
+    {
+      body,
+      visibility: isStaff.value ? composeMode.value : 'public',
+      reply_to_id: replyingTo.value?.id ?? null,
+    },
     {
       preserveScroll: true,
       onSuccess: () => {
         messageBody.value = ''
+        replyingTo.value = null
       },
     }
   )
+}
+
+// Administrator opens the ⋮ menu and replies privately to a specific message.
+// A private reply is just an internal (staff-only) message that quotes it.
+function startPrivateReply(message) {
+  replyingTo.value = message
+  composeMode.value = 'internal'
+  openMenuId.value = null
+}
+
+function cancelReply() {
+  replyingTo.value = null
+}
+
+function toggleMenu(id) {
+  openMenuId.value = openMenuId.value === id ? null : id
 }
 
 const filteredConversations = computed(() => {
@@ -473,6 +588,16 @@ function senderName(m) {
     if (name) return name
   }
   return `#${m.user_id}`
+}
+
+function quotedName(reply) {
+  if (!reply?.sender) return ''
+  return `${reply.sender.first_name ?? ''} ${reply.sender.last_name ?? ''}`.trim()
+}
+
+function truncate(text, len = 80) {
+  if (!text) return ''
+  return text.length > len ? `${text.slice(0, len)}…` : text
 }
 
 function formatTime(dateStr) {
@@ -546,6 +671,8 @@ function pushMessage(e) {
     body: e.body,
     user_id: e.user_id,
     visibility: e.visibility ?? 'public',
+    reply_to_id: e.reply_to_id ?? null,
+    reply_to: e.reply_to ?? null,
     created_at: e.created_at,
     sender: e.sender,
   })
@@ -593,6 +720,8 @@ function unsubscribe() {
 
 watch(activeId, (id) => {
   composeMode.value = 'public'
+  replyingTo.value = null
+  openMenuId.value = null
   subscribe(id)
 }, { immediate: true })
 onBeforeUnmount(unsubscribe)

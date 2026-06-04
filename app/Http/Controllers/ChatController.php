@@ -34,9 +34,10 @@ class ChatController extends Controller
         // Clients never use the full chat page (it would expose internal notes).
         abort_if($this->isClient($user), 403);
 
-        // Super-admins oversee every conversation. Join on first open so the
-        // existing membership-based auth and realtime channels just work.
-        if ($this->isSuperAdmin($user) && ! $this->isMember($conversation, $user->id)) {
+        // Oversight roles (super-admin, administrator) oversee every
+        // conversation. Join on first open so the existing membership-based
+        // auth and realtime channels just work.
+        if ($this->isOversight($user) && ! $this->isMember($conversation, $user->id)) {
             $conversation->members()->attach($user->id, ['joined_at' => now()]);
         }
 
@@ -68,24 +69,26 @@ class ChatController extends Controller
         }
 
         $message = $conversation->messages()->create([
-            'user_id'    => $user->id,
-            'body'       => $request->validated('body'),
-            'type'       => config('chat.messages.default_type'),
-            'visibility' => $visibility,
+            'user_id'     => $user->id,
+            'body'        => $request->validated('body'),
+            'type'        => config('chat.messages.default_type'),
+            'visibility'  => $visibility,
+            'reply_to_id' => $request->validated('reply_to_id'),
         ]);
 
         $conversation->touch();
 
-        broadcast(new MessageSent($message->load('sender')))->toOthers();
+        broadcast(new MessageSent($message->load('sender', 'replyTo.sender')))->toOthers();
 
         if ($request->wantsJson()) {
             return response()->json([
                 'message' => [
-                    'id'         => $message->id,
-                    'body'       => $message->body,
-                    'user_id'    => $message->user_id,
-                    'visibility' => $message->visibility,
-                    'created_at' => $message->created_at?->toIso8601String(),
+                    'id'          => $message->id,
+                    'body'        => $message->body,
+                    'user_id'     => $message->user_id,
+                    'visibility'  => $message->visibility,
+                    'reply_to_id' => $message->reply_to_id,
+                    'created_at'  => $message->created_at?->toIso8601String(),
                     'conversation_id' => $message->conversation_id,
                 ],
             ]);
@@ -110,7 +113,7 @@ class ChatController extends Controller
     private function conversationsListFor(CraftableProUser $user)
     {
 
-        $query = $this->isSuperAdmin($user)
+        $query = $this->isOversight($user)
             ? Conversation::query()
             : Conversation::forUser($user);
 
@@ -159,21 +162,46 @@ class ChatController extends Controller
                 ->select('craftable_pro_users.id', 'first_name', 'last_name')
                 ->get(),
             'messages' => $conversation->messages()
-                ->with('sender:id,first_name,last_name')
+                ->with([
+                    'sender:id,first_name,last_name',
+                    'replyTo:id,body,user_id',
+                    'replyTo.sender:id,first_name,last_name',
+                ])
                 ->oldest()
                 ->get()
                 ->map(fn (Message $m) => [
-                    'id'         => $m->id,
-                    'body'       => $m->body,
-                    'user_id'    => $m->user_id,
-                    'visibility' => $m->visibility,
-                    'created_at' => $m->created_at?->toIso8601String(),
-                    'sender'     => $m->sender ? [
+                    'id'          => $m->id,
+                    'body'        => $m->body,
+                    'user_id'     => $m->user_id,
+                    'visibility'  => $m->visibility,
+                    'reply_to_id' => $m->reply_to_id,
+                    'reply_to'    => $this->replyToPayload($m),
+                    'created_at'  => $m->created_at?->toIso8601String(),
+                    'sender'      => $m->sender ? [
                         'id'         => $m->sender->id,
                         'first_name' => $m->sender->first_name,
                         'last_name'  => $m->sender->last_name,
                     ] : null,
                 ]),
+        ];
+    }
+
+    /** A compact snapshot of the message a reply points at, for inline quoting. */
+    private function replyToPayload(Message $message): ?array
+    {
+        $parent = $message->replyTo;
+
+        if (! $parent) {
+            return null;
+        }
+
+        return [
+            'id'     => $parent->id,
+            'body'   => $parent->body,
+            'sender' => $parent->sender ? [
+                'first_name' => $parent->sender->first_name,
+                'last_name'  => $parent->sender->last_name,
+            ] : null,
         ];
     }
 
@@ -250,9 +278,12 @@ class ChatController extends Controller
         return $user->roles->pluck('name')->contains(config('chat.roles.client'));
     }
 
-    private function isSuperAdmin(CraftableProUser $user): bool
+    /** Oversight = roles that see every conversation and auto-join on open. */
+    private function isOversight(CraftableProUser $user): bool
     {
-        return $user->roles->pluck('name')->contains(config('chat.roles.super_admin'));
+        return $user->roles->pluck('name')
+            ->intersect(config('chat.roles.oversight'))
+            ->isNotEmpty();
     }
 
     /** Staff = the roles allowed to post and read internal notes. */

@@ -3,7 +3,8 @@
     <template v-if="isClient">
       <button
         type="button"
-        class="fixed bottom-6 right-6 z-[9999] flex h-14 w-14 items-center justify-center rounded-full bg-indigo-600 text-white shadow-2xl shadow-indigo-900/50 transition hover:scale-105 hover:bg-indigo-500"
+        class="fixed bottom-6 right-6 z-[9999] flex h-14 w-14 items-center justify-center rounded-full text-white shadow-2xl shadow-indigo-900/50 transition hover:scale-105"
+        :style="{ backgroundColor: publicColor }"
         :title="$t('craftable-pro', 'Contact support')"
         @click="openModal"
       >
@@ -59,7 +60,8 @@
               >
                 <div
                   class="max-w-[75%] rounded-2xl px-3 py-2 text-sm"
-                  :class="m.user_id === currentUserId ? 'bg-indigo-600 text-white' : 'bg-white/10 text-gray-100'"
+                  :class="m.user_id === currentUserId ? 'text-white' : 'bg-white/10 text-gray-100'"
+                  :style="m.user_id === currentUserId ? { backgroundColor: publicColor } : {}"
                 >
                   <p class="whitespace-pre-wrap break-words">{{ m.body }}</p>
                 </div>
@@ -81,7 +83,8 @@
             />
             <button
               type="submit"
-              class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-500 disabled:opacity-50"
+              class="rounded-md px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
+              :style="{ backgroundColor: publicColor }"
               :disabled="!body.trim() || sending"
             >
               Send
@@ -113,6 +116,11 @@ const scrollEl = ref(null)
 
 const isClient = computed(() =>
   (page.props.auth?.roles ?? []).includes('client')
+)
+
+// Configurable brand color (managed in the "Chat appearance" settings page).
+const publicColor = computed(
+  () => page.props.settings?.chat?.public_color || '#4f46e5'
 )
 
 const supportName = computed(() =>

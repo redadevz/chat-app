@@ -71,6 +71,13 @@
         >
           {{ $t("craftable-pro", "Settings") }}
         </SidebarItem>
+        <SidebarItem
+          :href="route('craftable-pro.chat-appearance.index')"
+          :icon="SwatchIcon"
+          v-can="'craftable-pro.settings.edit'"
+        >
+          {{ $t("craftable-pro", "Chat appearance") }}
+        </SidebarItem>
       </SidebarGroup>
     </nav>
   </div>
@@ -85,6 +92,7 @@ import {
   Cog8ToothIcon,
   ChatBubbleLeftRightIcon,
   CubeTransparentIcon,
+  SwatchIcon,
 } from "@heroicons/vue/24/outline";
 import { SidebarItem, SidebarGroup } from "craftable-pro/Components";
 import FloatingContactWidget from "@/craftable-pro/Components/FloatingContactWidget.vue";
