@@ -38,3 +38,10 @@ Broadcast::channel($channelPrefix.'.{conversationId}'.config('chat.channels.inte
 
     return $isMember && $isStaff;
 });
+
+// Personal channel carrying private whispers. A user may only ever subscribe to
+// their OWN channel, so a whisper addressed to someone else can never reach them
+// — the wire-level guarantee behind "just between the two of you".
+Broadcast::channel(config('chat.channels.user_prefix').'.{userId}', function ($user, int $userId) {
+    return (int) $user->id === $userId;
+});

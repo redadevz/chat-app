@@ -138,8 +138,9 @@
           class="group flex items-center gap-1"
           :class="m.user_id === currentUserId ? 'justify-end' : 'justify-start'"
         >
-          <!-- Administrator-only ⋮ menu: reply privately to this message. -->
-          <div v-if="isAdmin" class="relative order-last flex-shrink-0">
+          <!-- ⋮ menu: reply privately (whisper) to this message's author.
+               Oversight can whisper anyone; a recipient can whisper back. -->
+          <div v-if="canReplyPrivately(m)" class="relative order-last flex-shrink-0">
             <button
               type="button"
               class="rounded p-1 text-gray-500 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
@@ -178,28 +179,38 @@
           <div
             class="max-w-[70%] cursor-pointer rounded-2xl px-3 py-2 text-sm"
             :class="
-              m.visibility === 'internal'
-                ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/40'
-                : m.user_id === currentUserId
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white/10 text-gray-100'
+              m.private_to_id
+                ? 'bg-violet-500/15 text-violet-100 ring-1 ring-violet-500/40'
+                : m.visibility === 'internal'
+                  ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/40'
+                  : m.user_id === currentUserId
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white/10 text-gray-100'
             "
             @click="startReply(m)"
           >
-            <!-- Quoted message this is a private reply to. -->
+            <!-- Quoted message this is a reply to. -->
             <div
               v-if="m.reply_to"
-              class="mb-1 rounded border-l-2 border-amber-400/60 bg-black/20 px-2 py-1 text-[11px] opacity-80"
+              class="mb-1 rounded border-l-2 border-white/30 bg-black/20 px-2 py-1 text-[11px] opacity-80"
             >
               <span class="font-semibold">{{ quotedName(m.reply_to) || $t('craftable-pro', 'message') }}</span>
               <span class="opacity-70"> · {{ truncate(m.reply_to.body) }}</span>
             </div>
+            <!-- Whisper: visible only to the sender and this one recipient. -->
             <p
-              v-if="m.visibility === 'internal'"
+              v-if="m.private_to_id"
+              class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-violet-300"
+            >
+              <LockClosedIcon class="h-3 w-3" />
+              {{ $t('craftable-pro', 'Private · only you and') }} {{ whisperOtherName(m) }}
+            </p>
+            <p
+              v-else-if="m.visibility === 'internal'"
               class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300"
             >
               <LockClosedIcon class="h-3 w-3" />
-              {{ m.reply_to ? $t('craftable-pro', 'Private reply · staff only') : $t('craftable-pro', 'Internal · staff only') }}
+              {{ $t('craftable-pro', 'Internal · staff only') }}
             </p>
             <p
               v-if="m.user_id !== currentUserId"
@@ -229,19 +240,19 @@
           v-if="replyingTo"
           class="flex items-center gap-2 rounded-md border-l-2 px-3 py-1.5 text-[11px]"
           :class="
-            composeMode === 'internal'
-              ? 'border-amber-400/60 bg-amber-500/10 text-amber-100'
+            whisperTo
+              ? 'border-violet-400/60 bg-violet-500/10 text-violet-100'
               : 'border-indigo-400/60 bg-indigo-500/10 text-indigo-100'
           "
         >
           <LockClosedIcon
-            v-if="composeMode === 'internal'"
-            class="h-3.5 w-3.5 flex-shrink-0 text-amber-400"
+            v-if="whisperTo"
+            class="h-3.5 w-3.5 flex-shrink-0 text-violet-400"
           />
           <ArrowUturnLeftIcon v-else class="h-3.5 w-3.5 flex-shrink-0 text-indigo-300" />
           <span class="min-w-0 flex-1 truncate">
             {{
-              composeMode === 'internal'
+              whisperTo
                 ? $t('craftable-pro', 'Replying privately to')
                 : $t('craftable-pro', 'Replying to')
             }}
@@ -447,6 +458,7 @@ const props = defineProps({
   conversations: { type: Array, required: true },
   users: { type: Array, default: () => [] },
   active: { type: Object, default: null },
+  oversightRoles: { type: Array, default: () => [] },
 })
 
 const page = usePage()
@@ -460,8 +472,19 @@ const isStaff = computed(() => {
     roles.includes('account-manager')
   )
 })
-// Only the Administrator can start a private reply to a specific message.
-const isAdmin = computed(() => (page.props.auth?.roles ?? []).includes('Administrator'))
+// Oversight roles (super-admin/admin) may whisper any member of a conversation.
+const isOversight = computed(() => {
+  const roles = page.props.auth?.roles ?? []
+  return props.oversightRoles.some((r) => roles.includes(r))
+})
+
+// True if the current user may send a private reply to message `m`: oversight
+// users can whisper anyone; anyone else can only whisper BACK on a whisper they
+// received (reply to its sender).
+function canReplyPrivately(m) {
+  if (isOversight.value) return true
+  return m.private_to_id != null && m.private_to_id === currentUserId.value
+}
 
 const search = ref('')
 const activeId = computed(() => props.active?.id ?? null)
@@ -469,8 +492,11 @@ const messageBody = ref('')
 // 'public'  → the client can see the message
 // 'internal' → staff-only note (staff ↔ staff, hidden from the client)
 const composeMode = ref('public')
-// When set, the next message is a private reply quoting this message.
+// When set, the next message is a reply quoting this message.
 const replyingTo = ref(null)
+// When set, the next message is a private whisper to this user (id + name) —
+// only the two of you can see it.
+const whisperTo = ref(null)
 // Id of the message whose ⋮ menu is currently open (null = none).
 const openMenuId = ref(null)
 
@@ -519,12 +545,14 @@ function sendMessage() {
       body,
       visibility: isStaff.value ? composeMode.value : 'public',
       reply_to_id: replyingTo.value?.id ?? null,
+      private_to_id: whisperTo.value?.id ?? null,
     },
     {
       preserveScroll: true,
       onSuccess: () => {
         messageBody.value = ''
         replyingTo.value = null
+        whisperTo.value = null
       },
     }
   )
@@ -536,16 +564,22 @@ function startReply(message) {
   replyingTo.value = message
 }
 
-// Administrator opens the ⋮ menu and replies privately to a specific message.
-// A private reply is just an internal (staff-only) message that quotes it.
+// Reply privately to a message: the next message becomes a whisper visible only
+// to you and that message's author. Quotes the message too. The recipient is the
+// OTHER party — if it's a whisper I received, that's its sender.
 function startPrivateReply(message) {
   replyingTo.value = message
-  composeMode.value = 'internal'
+  whisperTo.value = {
+    id: message.user_id,
+    first_name: message.sender?.first_name ?? '',
+    last_name: message.sender?.last_name ?? '',
+  }
   openMenuId.value = null
 }
 
 function cancelReply() {
   replyingTo.value = null
+  whisperTo.value = null
 }
 
 function toggleMenu(id) {
@@ -602,6 +636,16 @@ function senderName(m) {
 function quotedName(reply) {
   if (!reply?.sender) return ''
   return `${reply.sender.first_name ?? ''} ${reply.sender.last_name ?? ''}`.trim()
+}
+
+// The OTHER party of a whisper from the current user's point of view: the
+// recipient if I sent it, otherwise the sender.
+function whisperOtherName(m) {
+  if (m.user_id === currentUserId.value) {
+    if (!m.recipient) return ''
+    return `${m.recipient.first_name ?? ''} ${m.recipient.last_name ?? ''}`.trim()
+  }
+  return senderName(m)
 }
 
 function truncate(text, len = 80) {
@@ -672,6 +716,7 @@ watch(activeId, () => nextTick(scrollToBottom))
 
 let subscribedChannel = null
 let internalChannel = null
+let whisperChannel = null
 
 function pushMessage(e) {
   if (threadMessages.value.some((m) => m.id === e.id)) return
@@ -682,6 +727,8 @@ function pushMessage(e) {
     visibility: e.visibility ?? 'public',
     reply_to_id: e.reply_to_id ?? null,
     reply_to: e.reply_to ?? null,
+    private_to_id: e.private_to_id ?? null,
+    recipient: e.recipient ?? null,
     created_at: e.created_at,
     sender: e.sender,
   })
@@ -714,6 +761,18 @@ function subscribe(id) {
       })
       .error((err) => console.error('[chat] internal channel error', err?.status, err?.type, err))
   }
+
+  // Personal whisper channel — private replies addressed to me arrive here, not
+  // on the conversation channel. Only append the ones for the open conversation.
+  if (currentUserId.value) {
+    whisperChannel = `whisper.${currentUserId.value}`
+    window.Echo.private(whisperChannel)
+      .listen('.message.sent', (e) => {
+        console.log('[chat] received whisper.sent', e)
+        if (e.conversation_id === id) pushMessage(e)
+      })
+      .error((err) => console.error('[chat] whisper channel error', err?.status, err?.type, err))
+  }
 }
 
 function unsubscribe() {
@@ -723,13 +782,18 @@ function unsubscribe() {
   if (internalChannel && window.Echo) {
     window.Echo.leave(`private-${internalChannel}`)
   }
+  if (whisperChannel && window.Echo) {
+    window.Echo.leave(`private-${whisperChannel}`)
+  }
   subscribedChannel = null
   internalChannel = null
+  whisperChannel = null
 }
 
 watch(activeId, (id) => {
   composeMode.value = 'public'
   replyingTo.value = null
+  whisperTo.value = null
   openMenuId.value = null
   subscribe(id)
 }, { immediate: true })

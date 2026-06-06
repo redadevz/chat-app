@@ -62,16 +62,17 @@ class ChatController extends Controller
         }
 
         $message = $conversation->messages()->create([
-            'user_id'     => $user->id,
-            'body'        => $request->validated('body'),
-            'type'        => config('chat.messages.default_type'),
-            'visibility'  => $visibility,
-            'reply_to_id' => $request->validated('reply_to_id'),
+            'user_id'       => $user->id,
+            'body'          => $request->validated('body'),
+            'type'          => config('chat.messages.default_type'),
+            'visibility'    => $visibility,
+            'reply_to_id'   => $request->validated('reply_to_id'),
+            'private_to_id' => $request->validated('private_to_id'),
         ]);
 
         $conversation->touch();
 
-        broadcast(new MessageSent($message->load('sender', 'replyTo.sender')))->toOthers();
+        broadcast(new MessageSent($message->load('sender', 'replyTo.sender', 'recipient')))->toOthers();
 
         if ($request->wantsJson()) {
             return response()->json([
@@ -81,6 +82,7 @@ class ChatController extends Controller
                     'user_id'     => $message->user_id,
                     'visibility'  => $message->visibility,
                     'reply_to_id' => $message->reply_to_id,
+                    'private_to_id' => $message->private_to_id,
                     'created_at'  => $message->created_at?->toIso8601String(),
                     'conversation_id' => $message->conversation_id,
                 ],
@@ -96,9 +98,10 @@ class ChatController extends Controller
         $user = auth('craftable-pro')->user();
 
         return Inertia::render('Chats/Index', [
-            'conversations' => $this->conversationsListFor($user),
-            'users'         => $this->pickerUsersFor($user),
-            'active'        => $active ? $this->threadPayloadFor($active) : null,
+            'conversations'  => $this->conversationsListFor($user),
+            'users'          => $this->pickerUsersFor($user),
+            'active'         => $active ? $this->threadPayloadFor($active, $user->id) : null,
+            'oversightRoles' => config('chat.roles.oversight'),
         ]);
     }
 
@@ -145,7 +148,7 @@ class ChatController extends Controller
     }
 
 
-    private function threadPayloadFor(Conversation $conversation): array
+    private function threadPayloadFor(Conversation $conversation, int $viewerId): array
     {
         return [
             'id'       => $conversation->id,
@@ -155,10 +158,12 @@ class ChatController extends Controller
                 ->select('craftable_pro_users.id', 'first_name', 'last_name')
                 ->get(),
             'messages' => $conversation->messages()
+                ->visibleTo($viewerId)
                 ->with([
                     'sender:id,first_name,last_name',
                     'replyTo:id,body,user_id',
                     'replyTo.sender:id,first_name,last_name',
+                    'recipient:id,first_name,last_name',
                 ])
                 ->oldest()
                 ->get()
@@ -169,6 +174,12 @@ class ChatController extends Controller
                     'visibility'  => $m->visibility,
                     'reply_to_id' => $m->reply_to_id,
                     'reply_to'    => $this->replyToPayload($m),
+                    'private_to_id' => $m->private_to_id,
+                    'recipient'   => $m->recipient ? [
+                        'id'         => $m->recipient->id,
+                        'first_name' => $m->recipient->first_name,
+                        'last_name'  => $m->recipient->last_name,
+                    ] : null,
                     'created_at'  => $m->created_at?->toIso8601String(),
                     'sender'      => $m->sender ? [
                         'id'         => $m->sender->id,
@@ -242,6 +253,7 @@ class ChatController extends Controller
             'current_user_id' => $user->id,
             'messages'        => $conversation->messages()
                 ->public()
+                ->visibleTo($user->id)
                 ->with('sender:id,first_name,last_name')
                 ->oldest()
                 ->get()

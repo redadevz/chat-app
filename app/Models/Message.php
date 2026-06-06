@@ -33,6 +33,7 @@ class Message extends Model
         'body',
         'type',
         'visibility',
+        'private_to_id',
     ];
 
     /**
@@ -47,6 +48,7 @@ class Message extends Model
         'conversation_id' => 'integer',
         'user_id' => 'integer',
         'reply_to_id' => 'integer',
+        'private_to_id' => 'integer',
     ];
     }
 
@@ -59,6 +61,24 @@ class Message extends Model
     public function isInternal(): bool
     {
         return $this->visibility === config('chat.visibility.internal');
+    }
+
+    /** A whisper is a private message visible only to its sender and one recipient. */
+    public function isWhisper(): bool
+    {
+        return $this->private_to_id !== null;
+    }
+
+    /**
+     * Hide whispers from everyone except the two parties: a message is visible
+     * when it is not a whisper, or the viewer is the sender or the recipient.
+     */
+    public function scopeVisibleTo(Builder $query, int $userId): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->whereNull('private_to_id')
+            ->orWhere('user_id', $userId)
+            ->orWhere('private_to_id', $userId));
     }
 
     public function conversation(): BelongsTo
@@ -74,5 +94,11 @@ class Message extends Model
     public function replyTo(): BelongsTo
     {
         return $this->belongsTo(self::class, 'reply_to_id');
+    }
+
+    /** The single user a whisper is addressed to (null for ordinary messages). */
+    public function recipient(): BelongsTo
+    {
+        return $this->belongsTo(CraftableProUser::class, 'private_to_id');
     }
 }

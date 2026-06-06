@@ -68,6 +68,10 @@ return [
     'channels' => [
         'prefix'          => env('CHAT_CHANNEL_PREFIX', 'conversation'),
         'internal_suffix' => env('CHAT_CHANNEL_INTERNAL_SUFFIX', '.internal'),
+        // Per-user channel for private whispers — "{user_prefix}.{userId}".
+        // Only the user themselves may subscribe, so a whisper never reaches
+        // anyone but its two parties, even over the wire.
+        'user_prefix'     => env('CHAT_CHANNEL_USER_PREFIX', 'whisper'),
     ],
 
     /*

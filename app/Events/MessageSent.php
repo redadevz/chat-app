@@ -25,6 +25,17 @@ class MessageSent implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
+        // A whisper goes ONLY to the two parties' personal channels — never the
+        // conversation channel — so no other member can receive it over the wire.
+        if ($this->message->private_to_id !== null) {
+            $userPrefix = config('chat.channels.user_prefix');
+
+            return [
+                new PrivateChannel("{$userPrefix}.{$this->message->user_id}"),
+                new PrivateChannel("{$userPrefix}.{$this->message->private_to_id}"),
+            ];
+        }
+
         // Internal (staff-only) notes ride a separate channel that clients are
         // not allowed to subscribe to, so they can never receive them.
         $prefix = config('chat.channels.prefix');
@@ -57,6 +68,12 @@ class MessageSent implements ShouldBroadcastNow
             'visibility'  => $this->message->visibility,
             'reply_to_id' => $this->message->reply_to_id,
             'reply_to'    => $this->replyToPayload(),
+            'private_to_id' => $this->message->private_to_id,
+            'recipient'   => $this->message->recipient ? [
+                'id'         => $this->message->recipient->id,
+                'first_name' => $this->message->recipient->first_name,
+                'last_name'  => $this->message->recipient->last_name,
+            ] : null,
             'created_at'  => $this->message->created_at?->toIso8601String(),
             'conversation_id' => $this->message->conversation_id,
             'sender'      => $this->message->sender ? [
