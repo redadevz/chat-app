@@ -21,7 +21,6 @@ class ChatController extends Controller
     {
         $user = auth('craftable-pro')->user();
 
-        // Clients use the floating popup only — they shouldn't see the full chat page.
         abort_if($this->isClient($user), 403);
 
         return $this->render();
@@ -31,12 +30,8 @@ class ChatController extends Controller
     {
         $user = auth('craftable-pro')->user();
 
-        // Clients never use the full chat page (it would expose internal notes).
         abort_if($this->isClient($user), 403);
 
-        // Oversight roles (super-admin, administrator) oversee every
-        // conversation. Join on first open so the existing membership-based
-        // auth and realtime channels just work.
         if ($this->isOversight($user) && ! $this->isMember($conversation, $user->id)) {
             $conversation->members()->attach($user->id, ['joined_at' => now()]);
         }
@@ -61,8 +56,6 @@ class ChatController extends Controller
     {
         $user = auth('craftable-pro')->user();
 
-        // Only staff may post an internal (staff-only) note; anyone else is
-        // forced back to a public message the client can see.
         $visibility = $request->validated('visibility', config('chat.visibility.default'));
         if ($visibility === config('chat.visibility.internal') && ! $this->isStaff($user)) {
             $visibility = config('chat.visibility.public');
@@ -186,7 +179,6 @@ class ChatController extends Controller
         ];
     }
 
-    /** A compact snapshot of the message a reply points at, for inline quoting. */
     private function replyToPayload(Message $message): ?array
     {
         $parent = $message->replyTo;

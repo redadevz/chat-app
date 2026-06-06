@@ -139,7 +139,7 @@
           :class="m.user_id === currentUserId ? 'justify-end' : 'justify-start'"
         >
           <!-- Administrator-only ⋮ menu: reply privately to this message. -->
-          <div v-if="isAdmin" class="relative flex-shrink-0">
+          <div v-if="isAdmin" class="relative order-last flex-shrink-0">
             <button
               type="button"
               class="rounded p-1 text-gray-500 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
@@ -159,34 +159,44 @@
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-white/10"
                 @click="startPrivateReply(m)"
               >
-                <LockClosedIcon class="h-3.5 w-3.5" :style="{ color: internalColor }" />
+                <LockClosedIcon class="h-3.5 w-3.5 text-amber-400" />
                 {{ $t('craftable-pro', 'Reply privately') }}
               </button>
             </div>
           </div>
 
+          <!-- Hover "reply" button — click any message to reply to it. -->
+          <button
+            type="button"
+            class="order-last flex-shrink-0 rounded p-1 text-gray-500 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
+            :title="$t('craftable-pro', 'Reply')"
+            @click="startReply(m)"
+          >
+            <ArrowUturnLeftIcon class="h-4 w-4" />
+          </button>
+
           <div
-            class="max-w-[70%] rounded-2xl px-3 py-2 text-sm"
+            class="max-w-[70%] cursor-pointer rounded-2xl px-3 py-2 text-sm"
             :class="
-              m.visibility !== 'internal' && m.user_id !== currentUserId
-                ? 'bg-white/10 text-gray-100'
-                : ''
+              m.visibility === 'internal'
+                ? 'bg-amber-500/15 text-amber-100 ring-1 ring-amber-500/40'
+                : m.user_id === currentUserId
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white/10 text-gray-100'
             "
-            :style="bubbleStyle(m)"
+            @click="startReply(m)"
           >
             <!-- Quoted message this is a private reply to. -->
             <div
               v-if="m.reply_to"
-              class="mb-1 rounded border-l-2 bg-black/20 px-2 py-1 text-[11px] opacity-80"
-              :style="{ borderColor: mix(internalColor, 60) }"
+              class="mb-1 rounded border-l-2 border-amber-400/60 bg-black/20 px-2 py-1 text-[11px] opacity-80"
             >
               <span class="font-semibold">{{ quotedName(m.reply_to) || $t('craftable-pro', 'message') }}</span>
               <span class="opacity-70"> · {{ truncate(m.reply_to.body) }}</span>
             </div>
             <p
               v-if="m.visibility === 'internal'"
-              class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide"
-              :style="{ color: internalColor }"
+              class="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300"
             >
               <LockClosedIcon class="h-3 w-3" />
               {{ m.reply_to ? $t('craftable-pro', 'Private reply · staff only') : $t('craftable-pro', 'Internal · staff only') }}
@@ -218,21 +228,29 @@
         <div
           v-if="replyingTo"
           class="flex items-center gap-2 rounded-md border-l-2 px-3 py-1.5 text-[11px]"
-          :style="{
-            borderColor: mix(internalColor, 60),
-            backgroundColor: mix(internalColor, 10),
-            color: mix(internalColor, 35, 'white'),
-          }"
+          :class="
+            composeMode === 'internal'
+              ? 'border-amber-400/60 bg-amber-500/10 text-amber-100'
+              : 'border-indigo-400/60 bg-indigo-500/10 text-indigo-100'
+          "
         >
-          <LockClosedIcon class="h-3.5 w-3.5 flex-shrink-0" :style="{ color: internalColor }" />
+          <LockClosedIcon
+            v-if="composeMode === 'internal'"
+            class="h-3.5 w-3.5 flex-shrink-0 text-amber-400"
+          />
+          <ArrowUturnLeftIcon v-else class="h-3.5 w-3.5 flex-shrink-0 text-indigo-300" />
           <span class="min-w-0 flex-1 truncate">
-            {{ $t('craftable-pro', 'Replying privately to') }}
+            {{
+              composeMode === 'internal'
+                ? $t('craftable-pro', 'Replying privately to')
+                : $t('craftable-pro', 'Replying to')
+            }}
             <span class="font-semibold">{{ senderName(replyingTo) }}</span>
             <span class="opacity-70"> · {{ truncate(replyingTo.body, 60) }}</span>
           </span>
           <button
             type="button"
-            class="flex-shrink-0 rounded p-0.5 text-amber-200 transition hover:bg-white/10 hover:text-white"
+            class="flex-shrink-0 rounded p-0.5 transition hover:bg-white/10 hover:text-white"
             :title="$t('craftable-pro', 'Cancel reply')"
             @click="cancelReply"
           >
@@ -245,8 +263,11 @@
             <button
               type="button"
               class="flex items-center gap-1 rounded px-2.5 py-1 font-medium transition"
-              :class="composeMode === 'public' ? 'text-white' : 'text-gray-400 hover:text-gray-200'"
-              :style="composeMode === 'public' ? { backgroundColor: publicColor } : {}"
+              :class="
+                composeMode === 'public'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-gray-400 hover:text-gray-200'
+              "
               @click="composeMode = 'public'"
             >
               <GlobeAltIcon class="h-3.5 w-3.5" />
@@ -255,8 +276,11 @@
             <button
               type="button"
               class="flex items-center gap-1 rounded px-2.5 py-1 font-medium transition"
-              :class="composeMode === 'internal' ? 'text-black' : 'text-gray-400 hover:text-gray-200'"
-              :style="composeMode === 'internal' ? { backgroundColor: internalColor } : {}"
+              :class="
+                composeMode === 'internal'
+                  ? 'bg-amber-500 text-black'
+                  : 'text-gray-400 hover:text-gray-200'
+              "
               @click="composeMode = 'internal'"
             >
               <LockClosedIcon class="h-3.5 w-3.5" />
@@ -281,19 +305,22 @@
                 ? $t('craftable-pro', 'Write an internal note…')
                 : $t('craftable-pro', 'Type a message')
             "
-            class="flex-1 resize-none rounded-md bg-[#1e1f22] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none"
-            :style="
+            class="flex-1 resize-none rounded-md bg-[#1e1f22] px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1"
+            :class="
               composeMode === 'internal'
-                ? { boxShadow: `inset 0 0 0 1px ${mix(internalColor, 40)}` }
-                : {}
+                ? 'ring-1 ring-amber-500/40 focus:ring-amber-500/60'
+                : 'focus:ring-indigo-500/60'
             "
             @keydown.enter.exact.prevent="sendMessage"
           />
           <button
             type="submit"
             class="rounded-md px-3 py-2 text-sm font-medium transition disabled:opacity-50"
-            :class="composeMode === 'internal' ? 'text-black' : 'text-white'"
-            :style="{ backgroundColor: composeMode === 'internal' ? internalColor : publicColor }"
+            :class="
+              composeMode === 'internal'
+                ? 'bg-amber-500 text-black hover:bg-amber-400'
+                : 'bg-indigo-600 text-white hover:bg-indigo-500'
+            "
             :disabled="!messageBody.trim()"
           >
             {{ $t('craftable-pro', 'Send') }}
@@ -413,6 +440,7 @@ import {
   LockClosedIcon,
   GlobeAltIcon,
   EllipsisVerticalIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
@@ -445,31 +473,6 @@ const composeMode = ref('public')
 const replyingTo = ref(null)
 // Id of the message whose ⋮ menu is currently open (null = none).
 const openMenuId = ref(null)
-
-// Configurable colors (managed in the "Chat appearance" settings page).
-const publicColor = computed(
-  () => page.props.settings?.chat?.public_color || '#4f46e5'
-)
-const internalColor = computed(
-  () => page.props.settings?.chat?.internal_color || '#f59e0b'
-)
-function mix(color, pct, other = 'transparent') {
-  return `color-mix(in srgb, ${color} ${pct}%, ${other})`
-}
-// Background/text/ring for a message bubble, derived from the configured colors.
-function bubbleStyle(m) {
-  if (m.visibility === 'internal') {
-    return {
-      backgroundColor: mix(internalColor.value, 15),
-      color: mix(internalColor.value, 35, 'white'),
-      boxShadow: `inset 0 0 0 1px ${mix(internalColor.value, 40)}`,
-    }
-  }
-  if (m.user_id === currentUserId.value) {
-    return { backgroundColor: publicColor.value, color: '#fff' }
-  }
-  return {}
-}
 
 const activeTitle = computed(() => {
   if (!props.active) return ''
@@ -525,6 +528,12 @@ function sendMessage() {
       },
     }
   )
+}
+
+// Click any message to reply to it (WhatsApp-style). A normal reply keeps the
+// current compose mode — it does NOT force the message to be staff-only.
+function startReply(message) {
+  replyingTo.value = message
 }
 
 // Administrator opens the ⋮ menu and replies privately to a specific message.

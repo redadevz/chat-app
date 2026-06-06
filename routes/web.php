@@ -35,9 +35,6 @@ Route::middleware('craftable-pro-middlewares')->prefix('admin')->name('craftable
     Route::post('conversations/bulk-destroy', [App\Http\Controllers\CraftablePro\ConversationController::class, 'bulkDestroy'])->name('conversations.bulk-destroy');
     Route::get('conversations/export', [App\Http\Controllers\CraftablePro\ConversationController::class, 'export'])->name('conversations.export');
 
-    Route::get('chat-appearance', [App\Http\Controllers\CraftablePro\ChatAppearanceController::class, 'index'])->name('chat-appearance.index');
-    Route::match(['put', 'patch'], 'chat-appearance', [App\Http\Controllers\CraftablePro\ChatAppearanceController::class, 'update'])->name('chat-appearance.update');
-
 });
 
 

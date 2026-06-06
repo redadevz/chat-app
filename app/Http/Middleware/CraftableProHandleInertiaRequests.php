@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Settings\ChatSettings;
 use Brackets\CraftablePro\Settings\GeneralSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
@@ -72,15 +71,6 @@ class CraftableProHandleInertiaRequests extends Middleware
             'settings' => [
                 'available_locales' => $settings->available_locales,
                 'default_locale' => $settings->default_locale,
-                // Chat colours, with fallbacks so a fresh install (settings not
-                // yet migrated) never breaks the page.
-                'chat' => rescue(fn () => [
-                    'public_color' => app(ChatSettings::class)->public_color,
-                    'internal_color' => app(ChatSettings::class)->internal_color,
-                ], [
-                    'public_color' => '#4f46e5',
-                    'internal_color' => '#f59e0b',
-                ], false),
             ],
             'notifications' => Inertia::lazy(fn () => $request->user('craftable-pro')?->notifications()->take(request()->get('notifications_page', 1) * 10)->get()),
             'unreadNotifications' => Inertia::lazy(fn () => $request->user('craftable-pro')?->unreadNotifications()->take(request()->get('notifications_page', 1) * 10)->get()),
