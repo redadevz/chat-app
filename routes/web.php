@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Chat\ChatPermissionController;
 use App\Http\Controllers\ChatController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,10 @@ Route::middleware(['craftable-pro-base-middlewares', 'craftable-pro-auth-middlew
         Route::post('chats/{conversation}/messages', [ChatController::class, 'storeMessage'])->name('messages.store');
         Route::delete('chats/{conversation}/membership', [ChatController::class, 'leave'])->name('leave');
         Route::get('chats-support', [ChatController::class, 'support'])->name('support');
+
+        // Oversight-only: configure which roles each role can start a chat with.
+        Route::get('chat-permissions', [ChatPermissionController::class, 'index'])->name('permissions.index');
+        Route::put('chat-permissions', [ChatPermissionController::class, 'update'])->name('permissions.update');
     });
 
 Route::craftablePro('admin');
