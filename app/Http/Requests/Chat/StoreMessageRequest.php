@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Chat;
 
-use App\Models\Conversation;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -14,11 +13,23 @@ class StoreMessageRequest extends FormRequest
     public function authorize(): bool
     {
         $conversation = $this->route('conversation');
-        $userId       = auth('craftable-pro')->id();
+        $user         = auth('craftable-pro')->user();
 
-        return $conversation
-            && $userId
-            && $conversation->members()->where('craftable_pro_users.id', $userId)->exists();
+        if (! $conversation || ! $user) {
+            return false;
+        }
+
+        $isMember = $conversation->members()
+            ->where('craftable_pro_users.id', $user->id)
+            ->exists();
+
+        // Oversight users may post (and whisper) in any conversation without
+        // being a member — consistent with their read-anywhere access.
+        $isOversight = $user->roles->pluck('name')
+            ->intersect(config('chat.roles.oversight'))
+            ->isNotEmpty();
+
+        return $isMember || $isOversight;
     }
 
     public function rules(): array

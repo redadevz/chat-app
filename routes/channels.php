@@ -11,15 +11,26 @@ Broadcast::routes([
 $channelPrefix = config('chat.channels.prefix');
 
 Broadcast::channel($channelPrefix.'.{conversationId}', function ($user, int $conversationId) {
-    return Conversation::find($conversationId)
-        ?->members()
+    $conversation = Conversation::find($conversationId);
+
+    if (! $conversation) {
+        return false;
+    }
+
+    $isMember = $conversation->members()
         ->where('craftable_pro_users.id', $user->id)
-        ->exists()
-        ?? false;
+        ->exists();
+
+    // Oversight users watch any conversation live without being a member.
+    $isOversight = $user->roles->pluck('name')
+        ->intersect(config('chat.roles.oversight'))
+        ->isNotEmpty();
+
+    return $isMember || $isOversight;
 });
 
-// Staff-only channel carrying internal notes. A subscriber must both be a
-// member of the conversation AND hold a staff role — clients are excluded so
+// Staff-only channel carrying internal notes. A subscriber must hold a staff
+// role AND either be a member or an oversight user — clients are excluded so
 // they can never receive an internal message, even over the wire.
 Broadcast::channel($channelPrefix.'.{conversationId}'.config('chat.channels.internal_suffix'), function ($user, int $conversationId) {
     $conversation = Conversation::find($conversationId);
@@ -32,11 +43,11 @@ Broadcast::channel($channelPrefix.'.{conversationId}'.config('chat.channels.inte
         ->where('craftable_pro_users.id', $user->id)
         ->exists();
 
-    $isStaff = $user->roles->pluck('name')
-        ->intersect(config('chat.roles.staff'))
-        ->isNotEmpty();
+    $roles = $user->roles->pluck('name');
+    $isStaff     = $roles->intersect(config('chat.roles.staff'))->isNotEmpty();
+    $isOversight = $roles->intersect(config('chat.roles.oversight'))->isNotEmpty();
 
-    return $isMember && $isStaff;
+    return $isStaff && ($isMember || $isOversight);
 });
 
 // Personal channel carrying private whispers. A user may only ever subscribe to

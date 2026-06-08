@@ -17,7 +17,7 @@ use Spatie\Permission\Models\Role;
 
 class ChatController extends Controller
 {
-    
+
     private function user(): CraftableProUser
     {
         return auth('craftable-pro')->user();
@@ -43,11 +43,12 @@ class ChatController extends Controller
 
         abort_if($this->isClient($user), 403);
 
-        if ($this->isOversight($user) && ! $this->isMember($conversation, $user->id)) {
-            $conversation->members()->attach($user->id, ['joined_at' => now()]);
-        }
 
-        $this->ensureMember($conversation);
+        abort_unless(
+            $this->isOversight($user) || $this->isMember($conversation, $user->id),
+            403,
+        );
+
         $this->markAsRead($conversation);
 
         return $this->render($conversation);
@@ -94,7 +95,7 @@ class ChatController extends Controller
                     'visibility'  => $message->visibility,
                     'reply_to_id' => $message->reply_to_id,
                     'private_to_id' => $message->private_to_id,
-                    'created_at'  => $message->created_at?->toIso8601String(),
+                    'created_at'  => $message->created_at,
                     'conversation_id' => $message->conversation_id,
                 ],
             ]);
