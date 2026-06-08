@@ -17,9 +17,20 @@ use Spatie\Permission\Models\Role;
 
 class ChatController extends Controller
 {
+    
+    private function user(): CraftableProUser
+    {
+        return auth('craftable-pro')->user();
+    }
+
+    private function userId(): int
+    {
+        return auth('craftable-pro')->id();
+    }
+
     public function index(): Response
     {
-        $user = auth('craftable-pro')->user();
+        $user = $this->user();
 
         abort_if($this->isClient($user), 403);
 
@@ -28,7 +39,7 @@ class ChatController extends Controller
 
     public function show(Conversation $conversation): Response
     {
-        $user = auth('craftable-pro')->user();
+        $user = $this->user();
 
         abort_if($this->isClient($user), 403);
 
@@ -44,7 +55,7 @@ class ChatController extends Controller
 
     public function store(StoreChatRequest $request): RedirectResponse
     {
-        $user  = auth('craftable-pro')->user();
+        $user  = $this->user();
         $other = $request->validated('user_id');
 
         $conversation = Conversation::findOrCreatePrivateBetween($user, $other);
@@ -54,7 +65,7 @@ class ChatController extends Controller
 
     public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse|\Illuminate\Http\JsonResponse
     {
-        $user = auth('craftable-pro')->user();
+        $user = $this->user();
 
         $visibility = $request->validated('visibility', config('chat.visibility.default'));
         if ($visibility === config('chat.visibility.internal') && ! $this->isStaff($user)) {
@@ -95,7 +106,7 @@ class ChatController extends Controller
 
     private function render(?Conversation $active = null): Response
     {
-        $user = auth('craftable-pro')->user();
+        $user = $this->user();
 
         return Inertia::render('Chats/Index', [
             'conversations'  => $this->conversationsListFor($user),
@@ -212,7 +223,7 @@ class ChatController extends Controller
     private function markAsRead(Conversation $conversation): void
     {
         $conversation->members()->updateExistingPivot(
-            auth('craftable-pro')->id(),
+            $this->userId(),
             ['last_read_at' => now()],
         );
     }
@@ -228,7 +239,7 @@ class ChatController extends Controller
 
     public function support(): \Illuminate\Http\JsonResponse
     {
-        $user = auth('craftable-pro')->user();
+        $user = $this->user();
         abort_unless($this->isClient($user), 403);
 
         $conversation = Conversation::supportFor($user);
@@ -268,7 +279,7 @@ class ChatController extends Controller
 
     private function ensureMember(Conversation $conversation): void
     {
-        $userId = auth('craftable-pro')->id();
+        $userId = $this->userId();
         abort_unless($this->isMember($conversation, $userId), 403);
     }
 
