@@ -57,6 +57,11 @@ class ChatController extends Controller
     public function store(StoreChatRequest $request): RedirectResponse
     {
         $user  = $this->user();
+
+        // Only oversight users may start a new conversation. Everyone else (incl.
+        // account-managers) just replies inside conversations they already belong to.
+        abort_unless($this->isOversight($user), 403);
+
         $other = $request->validated('user_id');
 
         $conversation = Conversation::findOrCreatePrivateBetween($user, $other);
