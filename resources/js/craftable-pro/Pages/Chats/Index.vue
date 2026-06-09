@@ -10,7 +10,7 @@
           {{ $t('craftable-pro', 'Direct Messages') }}
         </h2>
         <button
-          v-if="isOversight"
+          v-if="users.length"
           type="button"
           class="rounded p-1 text-gray-400 transition hover:bg-white/10 hover:text-white"
           :title="$t('craftable-pro', 'New chat')"
@@ -365,7 +365,7 @@
           }}
         </p>
         <button
-          v-if="isOversight"
+          v-if="users.length"
           type="button"
           class="mt-6 inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-indigo-900/30 transition hover:bg-indigo-500"
           @click="onNewChat"
