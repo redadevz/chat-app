@@ -19,7 +19,6 @@ Route::middleware(['craftable-pro-base-middlewares', 'craftable-pro-auth-middlew
         Route::delete('chats/{conversation}/membership', [ChatController::class, 'leave'])->name('leave');
         Route::get('chats-support', [ChatController::class, 'support'])->name('support');
 
-        // Oversight-only: configure which roles each role can start a chat with.
         Route::get('chat-permissions', [ChatPermissionController::class, 'index'])->name('permissions.index');
         Route::put('chat-permissions', [ChatPermissionController::class, 'update'])->name('permissions.update');
     });
