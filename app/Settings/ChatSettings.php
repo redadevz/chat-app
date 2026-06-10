@@ -5,9 +5,8 @@ namespace App\Settings;
 use Spatie\LaravelSettings\Settings;
 
 /**
- * All chat configuration, stored in the database (editable at runtime) instead
- * of config/chat.php. config/chat.php now only provides the initial seed values
- * used by the settings migration.
+ * All chat configuration, stored in the database and editable at runtime. The
+ * initial values are seeded by the settings migration.
  */
 class ChatSettings extends Settings
 {

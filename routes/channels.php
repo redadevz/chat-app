@@ -9,9 +9,15 @@ Broadcast::routes([
     'middleware' => ['web', 'craftable-pro-base-middlewares', 'craftable-pro-auth-middleware'],
 ]);
 
-// Channel names come from the database (App\Settings\ChatSettings). Resolved
-// once here, at channel-registration time.
-$channels = app(ChatSettings::class)->channels;
+// Channel names come from the database (App\Settings\ChatSettings). This file is
+// loaded at boot — including during `migrate` on a fresh DB where the settings
+// don't exist yet — so fall back to defaults if they can't be resolved, otherwise
+// the app could never boot to run its own migrations.
+try {
+    $channels = app(ChatSettings::class)->channels;
+} catch (\Throwable $e) {
+    $channels = ['prefix' => 'conversation', 'internal_suffix' => '.internal', 'user_prefix' => 'whisper'];
+}
 $channelPrefix = $channels['prefix'];
 
 Broadcast::channel($channelPrefix.'.{conversationId}', function ($user, int $conversationId) {

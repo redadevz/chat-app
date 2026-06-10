@@ -6,14 +6,31 @@ return new class extends SettingsMigration
 {
     public function up(): void
     {
-        // Seeded one-time from the current config/chat.php structure.
         $this->migrator->add('chat.max_message_length', 5000);
         $this->migrator->add('chat.whispers_enabled', true);
         $this->migrator->add('chat.default_visibility', 'public');
-        $this->migrator->add('chat.message_default_type', config('chat.messages.default_type'));
-        $this->migrator->add('chat.roles', config('chat.roles'));
-        $this->migrator->add('chat.visibility', config('chat.visibility'));
-        $this->migrator->add('chat.channels', config('chat.channels'));
+        $this->migrator->add('chat.message_default_type', 'text');
+
+        $this->migrator->add('chat.roles', [
+            'client'          => 'client',
+            'admin'           => 'Administrator',
+            'super_admin'     => 'super-admin',
+            'account_manager' => 'account-manager',
+            'staff'           => ['Administrator', 'super-admin', 'account-manager'],
+            'oversight'       => ['super-admin', 'Administrator'],
+        ]);
+
+        $this->migrator->add('chat.visibility', [
+            'public'   => 'public',
+            'internal' => 'internal',
+            'all'      => ['public', 'internal'],
+        ]);
+
+        $this->migrator->add('chat.channels', [
+            'prefix'          => 'conversation',
+            'internal_suffix' => '.internal',
+            'user_prefix'     => 'whisper',
+        ]);
     }
 
     public function down(): void
