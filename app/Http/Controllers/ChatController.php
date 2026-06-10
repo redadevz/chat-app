@@ -260,7 +260,7 @@ class ChatController extends Controller
         }
 
         $this->markAsRead($conversation);
-        
+
         $supportUser = $conversation->members()
             ->role($this->settings()->roles['account_manager'])
             ->where('craftable_pro_users.id', '!=', $user->id)
@@ -302,7 +302,6 @@ class ChatController extends Controller
         return $user->roles->pluck('name')->contains($this->settings()->roles['client']);
     }
 
-    /** Oversight = roles that see every conversation and auto-join on open. */
     private function isOversight(CraftableProUser $user): bool
     {
         return $user->roles->pluck('name')
@@ -310,7 +309,6 @@ class ChatController extends Controller
             ->isNotEmpty();
     }
 
-    /** Staff = the roles allowed to post and read internal notes. */
     private function isStaff(CraftableProUser $user): bool
     {
         return $user->roles->pluck('name')
