@@ -29,6 +29,11 @@ class ChatController extends Controller
         return auth('craftable-pro')->id();
     }
 
+    private function settings(): ChatSettings
+    {
+        return app(ChatSettings::class);
+    }
+
     public function index(): Response
     {
         $user = $this->user();
@@ -70,8 +75,8 @@ class ChatController extends Controller
         $user = $this->user();
 
         $visibility = $request->validated('visibility', $settings->default_visibility);
-        if ($visibility === config('chat.visibility.internal') && ! $this->isStaff($user)) {
-            $visibility = config('chat.visibility.public');
+        if ($visibility === $settings->visibility['internal'] && ! $this->isStaff($user)) {
+            $visibility = $settings->visibility['public'];
         }
 
         // Whispers can be turned off globally from chat settings.
@@ -82,7 +87,7 @@ class ChatController extends Controller
         $message = $conversation->messages()->create([
             'user_id'       => $user->id,
             'body'          => $request->validated('body'),
-            'type'          => config('chat.messages.default_type'),
+            'type'          => $settings->message_default_type,
             'visibility'    => $visibility,
             'reply_to_id'   => $request->validated('reply_to_id'),
             'private_to_id' => $privateToId,
@@ -119,7 +124,7 @@ class ChatController extends Controller
             'conversations'  => $this->conversationsListFor($user),
             'users'          => $this->pickerUsersFor($user),
             'active'         => $active ? $this->threadPayloadFor($active, $user->id) : null,
-            'oversightRoles' => config('chat.roles.oversight'),
+            'oversightRoles' => $this->settings()->roles['oversight'],
         ]);
     }
 
@@ -260,7 +265,7 @@ class ChatController extends Controller
         // The client must only ever see their account manager as the single
         // point of contact — never a super-admin who joined to oversee.
         $supportUser = $conversation->members()
-            ->role(config('chat.roles.account_manager'))
+            ->role($this->settings()->roles['account_manager'])
             ->where('craftable_pro_users.id', '!=', $user->id)
             ->select('craftable_pro_users.id', 'first_name', 'last_name')
             ->first();
@@ -297,14 +302,14 @@ class ChatController extends Controller
 
     private function isClient(CraftableProUser $user): bool
     {
-        return $user->roles->pluck('name')->contains(config('chat.roles.client'));
+        return $user->roles->pluck('name')->contains($this->settings()->roles['client']);
     }
 
     /** Oversight = roles that see every conversation and auto-join on open. */
     private function isOversight(CraftableProUser $user): bool
     {
         return $user->roles->pluck('name')
-            ->intersect(config('chat.roles.oversight'))
+            ->intersect($this->settings()->roles['oversight'])
             ->isNotEmpty();
     }
 
@@ -312,7 +317,7 @@ class ChatController extends Controller
     private function isStaff(CraftableProUser $user): bool
     {
         return $user->roles->pluck('name')
-            ->intersect(config('chat.roles.staff'))
+            ->intersect($this->settings()->roles['staff'])
             ->isNotEmpty();
     }
 

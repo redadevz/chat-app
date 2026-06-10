@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Settings\ChatSettings;
 use Brackets\CraftablePro\Models\CraftableProUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -55,12 +56,12 @@ class Message extends Model
     /** Only messages the client is allowed to see. */
     public function scopePublic(Builder $query): Builder
     {
-        return $query->where('visibility', config('chat.visibility.public'));
+        return $query->where('visibility', app(ChatSettings::class)->visibility['public']);
     }
 
     public function isInternal(): bool
     {
-        return $this->visibility === config('chat.visibility.internal');
+        return $this->visibility === app(ChatSettings::class)->visibility['internal'];
     }
 
     /** A whisper is a private message visible only to its sender and one recipient. */

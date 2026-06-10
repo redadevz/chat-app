@@ -27,7 +27,7 @@ class StoreMessageRequest extends FormRequest
         // Oversight users may post (and whisper) in any conversation without
         // being a member — consistent with their read-anywhere access.
         $isOversight = $user->roles->pluck('name')
-            ->intersect(config('chat.roles.oversight'))
+            ->intersect(app(ChatSettings::class)->roles['oversight'])
             ->isNotEmpty();
 
         return $isMember || $isOversight;
@@ -39,7 +39,7 @@ class StoreMessageRequest extends FormRequest
 
         return [
             'body'        => ['required', 'string', 'max:'.app(ChatSettings::class)->max_message_length],
-            'visibility'  => ['sometimes', Rule::in(config('chat.visibility.all'))],
+            'visibility'  => ['sometimes', Rule::in(app(ChatSettings::class)->visibility['all'])],
             // A reply may only point at a message in the same conversation.
             'reply_to_id' => [
                 'sometimes', 'nullable', 'integer',
@@ -76,7 +76,7 @@ class StoreMessageRequest extends FormRequest
             $conversation = $this->route('conversation');
 
             $isOversight = $user->roles->pluck('name')
-                ->intersect(config('chat.roles.oversight'))
+                ->intersect(app(ChatSettings::class)->roles['oversight'])
                 ->isNotEmpty();
 
             $whisperedFirst = $conversation->messages()

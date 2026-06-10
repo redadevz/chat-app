@@ -4,6 +4,7 @@
 
 namespace App\Models;
 
+use App\Settings\ChatSettings;
 use Brackets\CraftablePro\Models\CraftableProUser;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -99,7 +100,7 @@ class Conversation extends Model
             $existing = static::query()
                 ->where('type', 'private')
                 ->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $client->id))
-                ->whereHas('members', fn (Builder $q) => $q->role(config('chat.roles.account_manager'))
+                ->whereHas('members', fn (Builder $q) => $q->role(app(ChatSettings::class)->roles['account_manager'])
                     ->where('craftable_pro_users.id', '!=', $client->id))
                 ->first();
 
@@ -116,7 +117,7 @@ class Conversation extends Model
 
     private static function nextAccountManager(): ?CraftableProUser
     {
-        return User::role(config('chat.roles.account_manager'))
+        return User::role(app(ChatSettings::class)->roles['account_manager'])
             ->whereNull('craftable_pro_users.deleted_at')
             ->select('craftable_pro_users.*')
             ->selectSub(

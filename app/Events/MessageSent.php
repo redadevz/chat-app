@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Events;
 
 use App\Models\Message;
+use App\Settings\ChatSettings;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -25,10 +26,12 @@ class MessageSent implements ShouldBroadcastNow
      */
     public function broadcastOn(): array
     {
+        $channels = app(ChatSettings::class)->channels;
+
         // A whisper goes ONLY to the two parties' personal channels — never the
         // conversation channel — so no other member can receive it over the wire.
         if ($this->message->private_to_id !== null) {
-            $userPrefix = config('chat.channels.user_prefix');
+            $userPrefix = $channels['user_prefix'];
 
             return [
                 new PrivateChannel("{$userPrefix}.{$this->message->user_id}"),
@@ -38,8 +41,8 @@ class MessageSent implements ShouldBroadcastNow
 
         // Internal (staff-only) notes ride a separate channel that clients are
         // not allowed to subscribe to, so they can never receive them.
-        $prefix = config('chat.channels.prefix');
-        $suffix = $this->message->isInternal() ? config('chat.channels.internal_suffix') : '';
+        $prefix = $channels['prefix'];
+        $suffix = $this->message->isInternal() ? $channels['internal_suffix'] : '';
 
         return [
             new PrivateChannel("{$prefix}.{$this->message->conversation_id}{$suffix}"),

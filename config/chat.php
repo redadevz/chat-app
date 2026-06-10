@@ -15,13 +15,7 @@ $internalVisibility = env('CHAT_VISIBILITY_INTERNAL', 'internal');
 
 return [
 
-    /*
-    |--------------------------------------------------------------------------
-    | Roles
-    |--------------------------------------------------------------------------
-    | Spatie role names this feature reasons about. "staff" is the set of
-    | roles allowed to post/read internal notes and oversee conversations.
-    */
+
 
     'roles' => [
         'client'          => env('CHAT_ROLE_CLIENT', 'client'),
@@ -29,13 +23,11 @@ return [
         'super_admin'     => $superAdmin,
         'account_manager' => $accountManager,
 
-        // Roles allowed to post/read internal notes (incl. private replies).
         'staff' => array_values(array_filter(array_map(
             'trim',
             explode(',', env('CHAT_ROLES_STAFF', "{$admin},{$superAdmin},{$accountManager}")),
         ))),
 
-        // Roles that oversee every conversation (see all + auto-join on open).
         'oversight' => array_values(array_filter(array_map(
             'trim',
             explode(',', env('CHAT_ROLES_OVERSIGHT', "{$superAdmin},{$admin}")),
