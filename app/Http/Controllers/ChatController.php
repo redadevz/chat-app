@@ -9,6 +9,7 @@ use App\Http\Requests\Chat\StoreChatRequest;
 use App\Http\Requests\Chat\StoreMessageRequest;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Settings\ChatSettings;
 use Brackets\CraftablePro\Models\CraftableProUser;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -64,14 +65,19 @@ class ChatController extends Controller
         return redirect()->route('chats.show', $conversation);
     }
 
-    public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse|\Illuminate\Http\JsonResponse
+    public function storeMessage(StoreMessageRequest $request, Conversation $conversation, ChatSettings $settings): RedirectResponse|\Illuminate\Http\JsonResponse
     {
         $user = $this->user();
 
-        $visibility = $request->validated('visibility', config('chat.visibility.default'));
+        $visibility = $request->validated('visibility', $settings->default_visibility);
         if ($visibility === config('chat.visibility.internal') && ! $this->isStaff($user)) {
             $visibility = config('chat.visibility.public');
         }
+
+        // Whispers can be turned off globally from chat settings.
+        $privateToId = $settings->whispers_enabled
+            ? $request->validated('private_to_id')
+            : null;
 
         $message = $conversation->messages()->create([
             'user_id'       => $user->id,
@@ -79,7 +85,7 @@ class ChatController extends Controller
             'type'          => config('chat.messages.default_type'),
             'visibility'    => $visibility,
             'reply_to_id'   => $request->validated('reply_to_id'),
-            'private_to_id' => $request->validated('private_to_id'),
+            'private_to_id' => $privateToId,
         ]);
 
         $conversation->touch();

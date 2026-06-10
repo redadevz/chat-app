@@ -50,10 +50,10 @@ return [
     | "internal" → staff-only note (account-manager ↔ super-admin).
     */
 
+    // The default visibility now lives in the database (App\Settings\ChatSettings).
     'visibility' => [
         'public'   => $publicVisibility,
         'internal' => $internalVisibility,
-        'default'  => env('CHAT_VISIBILITY_DEFAULT', $publicVisibility),
         'all'      => [$publicVisibility, $internalVisibility],
     ],
 
@@ -80,8 +80,8 @@ return [
     |--------------------------------------------------------------------------
     */
 
+    // max_length now lives in the database (App\Settings\ChatSettings).
     'messages' => [
-        'max_length'   => (int) env('CHAT_MESSAGE_MAX_LENGTH', 5000),
         'default_type' => env('CHAT_MESSAGE_DEFAULT_TYPE', 'text'),
     ],
 

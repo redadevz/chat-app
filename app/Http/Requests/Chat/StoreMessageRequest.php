@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Chat;
 
+use App\Settings\ChatSettings;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -37,7 +38,7 @@ class StoreMessageRequest extends FormRequest
         $conversation = $this->route('conversation');
 
         return [
-            'body'        => ['required', 'string', 'max:'.config('chat.messages.max_length')],
+            'body'        => ['required', 'string', 'max:'.app(ChatSettings::class)->max_message_length],
             'visibility'  => ['sometimes', Rule::in(config('chat.visibility.all'))],
             // A reply may only point at a message in the same conversation.
             'reply_to_id' => [
