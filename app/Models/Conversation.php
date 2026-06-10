@@ -94,9 +94,6 @@ class Conversation extends Model
     public static function supportFor(CraftableProUser $client): ?self
     {
         return DB::transaction(function () use ($client) {
-            // The support thread is the private conversation that has both this
-            // client and an account-manager. We intentionally do NOT require
-            // exactly 2 members: a super-admin may have joined to oversee it.
             $existing = static::query()
                 ->where('type', 'private')
                 ->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $client->id))

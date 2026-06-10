@@ -70,10 +70,7 @@ class Message extends Model
         return $this->private_to_id !== null;
     }
 
-    /**
-     * Hide whispers from everyone except the two parties: a message is visible
-     * when it is not a whisper, or the viewer is the sender or the recipient.
-     */
+
     public function scopeVisibleTo(Builder $query, int $userId): Builder
     {
         return $query->where(fn (Builder $q) => $q
@@ -97,7 +94,6 @@ class Message extends Model
         return $this->belongsTo(self::class, 'reply_to_id');
     }
 
-    /** The single user a whisper is addressed to (null for ordinary messages). */
     public function recipient(): BelongsTo
     {
         return $this->belongsTo(CraftableProUser::class, 'private_to_id');

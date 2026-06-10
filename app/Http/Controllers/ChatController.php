@@ -79,7 +79,6 @@ class ChatController extends Controller
             $visibility = $settings->visibility['public'];
         }
 
-        // Whispers can be turned off globally from chat settings.
         $privateToId = $settings->whispers_enabled
             ? $request->validated('private_to_id')
             : null;
@@ -261,9 +260,7 @@ class ChatController extends Controller
         }
 
         $this->markAsRead($conversation);
-
-        // The client must only ever see their account manager as the single
-        // point of contact — never a super-admin who joined to oversee.
+        
         $supportUser = $conversation->members()
             ->role($this->settings()->roles['account_manager'])
             ->where('craftable_pro_users.id', '!=', $user->id)
