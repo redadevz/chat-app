@@ -236,7 +236,7 @@ class ChatController extends Controller
         $conversation->members()->updateExistingPivot(
             $this->userId(),
             ['last_read_at' => now()],
-        );
+        ); 
     }
 
 
@@ -265,7 +265,7 @@ class ChatController extends Controller
             ->role($this->settings()->roles['account_manager'])
             ->where('craftable_pro_users.id', '!=', $user->id)
             ->select('craftable_pro_users.id', 'first_name', 'last_name')
-            ->first();
+            ->first();  
 
         return response()->json([
             'conversation_id' => $conversation->id,
