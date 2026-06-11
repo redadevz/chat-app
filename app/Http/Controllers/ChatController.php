@@ -166,7 +166,15 @@ class ChatController extends Controller
             ->when($allowed !== ['*'], fn ($q) => $q->role($allowed))
             ->select('id', 'first_name', 'last_name')
             ->orderBy('first_name')
-            ->get();
+            ->get()
+            // Map to plain arrays so serializing doesn't trigger the user model's
+            // appended avatar/media attributes (which would cause an N+1 of media queries).
+            ->map(fn (CraftableProUser $u) => [
+                'id'         => $u->id,
+                'first_name' => $u->first_name,
+                'last_name'  => $u->last_name,
+            ])
+            ->values();
     }
 
 
@@ -178,7 +186,13 @@ class ChatController extends Controller
             'type'     => $conversation->type,
             'members'  => $conversation->members()
                 ->select('craftable_pro_users.id', 'first_name', 'last_name')
-                ->get(),
+                ->get()
+                ->map(fn (CraftableProUser $m) => [
+                    'id'         => $m->id,
+                    'first_name' => $m->first_name,
+                    'last_name'  => $m->last_name,
+                ])
+                ->values(),
             'messages' => $conversation->messages()
                 ->visibleTo($viewerId)
                 ->with([
