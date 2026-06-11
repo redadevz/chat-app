@@ -64,9 +64,9 @@ class StoreMessageRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
-            $recipientId = $this->input('private_to_id');
+            $id = $this->input('private_to_id');
 
-            if (! $recipientId) {
+            if (! $id) {
                 return;
             }
 
@@ -79,7 +79,7 @@ class StoreMessageRequest extends FormRequest
                 ->isNotEmpty();
 
             $whisperedFirst = $conversation->messages()
-                ->where('user_id', $recipientId)
+                ->where('user_id', $id)
                 ->where('private_to_id', $user->id)
                 ->exists();
 
@@ -92,8 +92,7 @@ class StoreMessageRequest extends FormRequest
                 return;
             }
 
-            // A whisper may only target a staff member — never a client.
-            $recipient = CraftableProUser::find($recipientId);
+            $recipient = CraftableProUser::find($id);
             $recipientIsStaff = $recipient
                 && $recipient->roles->pluck('name')->intersect($staffRoles)->isNotEmpty();
 
