@@ -108,6 +108,12 @@
         class="fixed inset-0 z-10"
         @click="openMenuId = null"
       />
+      <!-- Click-away layer that closes the whisper member picker. -->
+      <div
+        v-if="whisperPickerOpen"
+        class="fixed inset-0 z-10"
+        @click="whisperPickerOpen = false"
+      />
       <header
         class="flex items-center gap-3 border-b border-black/30 px-4 py-3 shadow-sm"
       >
