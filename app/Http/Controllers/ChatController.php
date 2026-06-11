@@ -6,7 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Events\MessageSent;
 use App\Http\Requests\Chat\StoreChatRequest;
-use App\Http\Requests\Chat\StoreMessageRequest;
+use App\Http\Requests\CraftablePro\Message\StoreMessageRequest;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Settings\ChatSettings;
