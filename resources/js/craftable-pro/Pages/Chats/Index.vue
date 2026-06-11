@@ -138,9 +138,9 @@
           class="group flex items-center gap-1"
           :class="m.user_id === currentUserId ? 'justify-end' : 'justify-start'"
         >
-          <!-- ⋮ menu: reply privately (whisper) to this message's author.
-               Oversight can whisper anyone; a recipient can whisper back. -->
-          <div v-if="canReplyPrivately(m)" class="relative order-last flex-shrink-0">
+          <!-- ⋮ menu: every message can be replied to; oversight (or a whisper
+               recipient) also gets "Reply privately". -->
+          <div class="relative order-last flex-shrink-0">
             <button
               type="button"
               class="rounded p-1 text-gray-500 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
@@ -158,6 +158,15 @@
               <button
                 type="button"
                 class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-white/10"
+                @click="startReply(m)"
+              >
+                <ArrowUturnLeftIcon class="h-3.5 w-3.5 text-gray-400" />
+                {{ $t('craftable-pro', 'Reply') }}
+              </button>
+              <button
+                v-if="canReplyPrivately(m)"
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-white/10"
                 @click="startPrivateReply(m)"
               >
                 <LockClosedIcon class="h-3.5 w-3.5 text-amber-400" />
@@ -166,18 +175,8 @@
             </div>
           </div>
 
-          <!-- Hover "reply" button — click any message to reply to it. -->
-          <button
-            type="button"
-            class="order-last flex-shrink-0 rounded p-1 text-gray-500 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100"
-            :title="$t('craftable-pro', 'Reply')"
-            @click="startReply(m)"
-          >
-            <ArrowUturnLeftIcon class="h-4 w-4" />
-          </button>
-
           <div
-            class="max-w-[70%] cursor-pointer rounded-2xl px-3 py-2 text-sm"
+            class="max-w-[70%] rounded-2xl px-3 py-2 text-sm"
             :class="
               m.private_to_id
                 ? 'bg-violet-500/15 text-violet-100 ring-1 ring-violet-500/40'
@@ -187,7 +186,6 @@
                     ? 'bg-indigo-600 text-white'
                     : 'bg-white/10 text-gray-100'
             "
-            @click="startReply(m)"
           >
             <!-- Quoted message this is a reply to. -->
             <div
@@ -237,7 +235,7 @@
         @submit.prevent="sendMessage"
       >
         <div
-          v-if="replyingTo"
+          v-if="replyingTo || whisperTo"
           class="flex items-center gap-2 rounded-md border-l-2 px-3 py-1.5 text-[11px]"
           :class="
             whisperTo
@@ -251,18 +249,20 @@
           />
           <ArrowUturnLeftIcon v-else class="h-3.5 w-3.5 flex-shrink-0 text-indigo-300" />
           <span class="min-w-0 flex-1 truncate">
-            {{
-              whisperTo
-                ? $t('craftable-pro', 'Replying privately to')
-                : $t('craftable-pro', 'Replying to')
-            }}
-            <span class="font-semibold">{{ senderName(replyingTo) }}</span>
-            <span class="opacity-70"> · {{ truncate(replyingTo.body, 60) }}</span>
+            <template v-if="whisperTo">
+              {{ replyingTo ? $t('craftable-pro', 'Replying privately to') : $t('craftable-pro', 'Whispering to') }}
+              <span class="font-semibold">{{ whisperToName }}</span>
+            </template>
+            <template v-else>
+              {{ $t('craftable-pro', 'Replying to') }}
+              <span class="font-semibold">{{ senderName(replyingTo) }}</span>
+            </template>
+            <span v-if="replyingTo" class="opacity-70"> · {{ truncate(replyingTo.body, 60) }}</span>
           </span>
           <button
             type="button"
             class="flex-shrink-0 rounded p-0.5 transition hover:bg-white/10 hover:text-white"
-            :title="$t('craftable-pro', 'Cancel reply')"
+            :title="$t('craftable-pro', 'Cancel')"
             @click="cancelReply"
           >
             <XMarkIcon class="h-3.5 w-3.5" />
@@ -298,6 +298,36 @@
               {{ $t('craftable-pro', 'Private') }}
             </button>
           </div>
+
+          <!-- Whisper: pick a member of this conversation to message 1-to-1. -->
+          <div v-if="whisperableMembers.length" class="relative">
+            <button
+              type="button"
+              class="flex items-center gap-1 rounded-md bg-[#1e1f22] px-2.5 py-1.5 text-xs font-medium text-violet-300 transition hover:text-violet-200"
+              :class="whisperPickerOpen ? 'ring-1 ring-violet-500/50' : ''"
+              :title="$t('craftable-pro', 'Whisper to a member')"
+              @click="whisperPickerOpen = !whisperPickerOpen"
+            >
+              <LockClosedIcon class="h-3.5 w-3.5" />
+              {{ $t('craftable-pro', 'Whisper') }}
+            </button>
+            <div
+              v-if="whisperPickerOpen"
+              class="absolute bottom-full left-0 z-20 mb-1 max-h-60 w-52 overflow-y-auto rounded-md bg-[#2b2d31] py-1 shadow-xl shadow-black/60 ring-1 ring-black/40"
+            >
+              <button
+                v-for="member in whisperableMembers"
+                :key="member.id"
+                type="button"
+                class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-gray-200 transition hover:bg-white/10"
+                @click="selectWhisperTarget(member)"
+              >
+                <LockClosedIcon class="h-3 w-3 text-violet-400" />
+                {{ memberName(member) }}
+              </button>
+            </div>
+          </div>
+
           <span class="text-[11px] text-gray-500">
             {{
               composeMode === 'internal'
@@ -496,8 +526,24 @@ const replyingTo = ref(null)
 // When set, the next message is a private whisper to this user (id + name) —
 // only the two of you can see it.
 const whisperTo = ref(null)
+// Whether the "Whisper to a member" picker dropdown is open.
+const whisperPickerOpen = ref(false)
 // Id of the message whose ⋮ menu is currently open (null = none).
 const openMenuId = ref(null)
+
+// Members you can whisper to: staff only (never a client), excluding yourself.
+const whisperableMembers = computed(() => {
+  if (!isStaff.value) return []
+  return (props.active?.members ?? []).filter(
+    (m) => m.id !== currentUserId.value && m.is_staff
+  )
+})
+
+// Display name of the current whisper target (for the compose preview).
+const whisperToName = computed(() => {
+  if (!whisperTo.value) return ''
+  return memberName(whisperTo.value)
+})
 
 const activeTitle = computed(() => {
   if (!props.active) return ''
@@ -552,15 +598,28 @@ function sendMessage() {
         messageBody.value = ''
         replyingTo.value = null
         whisperTo.value = null
+        whisperPickerOpen.value = false
       },
     }
   )
 }
 
-// Click any message to reply to it (WhatsApp-style). A normal reply keeps the
-// current compose mode — it does NOT force the message to be staff-only.
+// Reply to a message (from the ⋮ menu). A normal reply keeps the current
+// compose mode — it does NOT force the message to be staff-only.
 function startReply(message) {
   replyingTo.value = message
+  openMenuId.value = null
+}
+
+// Whisper directly to a chosen member of the conversation (not tied to a message).
+function selectWhisperTarget(member) {
+  whisperTo.value = {
+    id: member.id,
+    first_name: member.first_name ?? '',
+    last_name: member.last_name ?? '',
+  }
+  replyingTo.value = null
+  whisperPickerOpen.value = false
 }
 
 // Reply privately to a message: the next message becomes a whisper visible only
@@ -630,6 +689,12 @@ function senderName(m) {
     if (name) return name
   }
   return `#${m.user_id}`
+}
+
+// A member's display name, falling back to "#id" when they have no name set.
+function memberName(member) {
+  const name = `${member.first_name ?? ''} ${member.last_name ?? ''}`.trim()
+  return name || `#${member.id}`
 }
 
 function quotedName(reply) {
@@ -793,6 +858,7 @@ watch(activeId, (id) => {
   composeMode.value = 'public'
   replyingTo.value = null
   whisperTo.value = null
+  whisperPickerOpen.value = false
   openMenuId.value = null
   subscribe(id)
 }, { immediate: true })

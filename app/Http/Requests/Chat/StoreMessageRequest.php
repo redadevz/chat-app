@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Chat;
 
 use App\Settings\ChatSettings;
+use Brackets\CraftablePro\Models\CraftableProUser;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -60,8 +61,9 @@ class StoreMessageRequest extends FormRequest
     }
 
     /**
-     * Only an oversight user may start a whisper. A non-oversight member may
-     * whisper back, but only to someone who has already whispered them here.
+     * Only a staff user (e.g. super-admin / account-manager) may start a whisper.
+     * Any other member may whisper back, but only to someone who has already
+     * whispered them in this conversation.
      */
     public function withValidator(Validator $validator): void
     {
@@ -74,9 +76,10 @@ class StoreMessageRequest extends FormRequest
 
             $user         = auth('craftable-pro')->user();
             $conversation = $this->route('conversation');
+            $staffRoles   = app(ChatSettings::class)->roles['staff'];
 
-            $isOversight = $user->roles->pluck('name')
-                ->intersect(app(ChatSettings::class)->roles['oversight'])
+            $isStaff = $user->roles->pluck('name')
+                ->intersect($staffRoles)
                 ->isNotEmpty();
 
             $whisperedFirst = $conversation->messages()
@@ -84,10 +87,24 @@ class StoreMessageRequest extends FormRequest
                 ->where('private_to_id', $user->id)
                 ->exists();
 
-            if (! $isOversight && ! $whisperedFirst) {
+            if (! $isStaff && ! $whisperedFirst) {
                 $validator->errors()->add(
                     'private_to_id',
                     'You may not privately message this member.',
+                );
+
+                return;
+            }
+
+            // A whisper may only target a staff member — never a client.
+            $recipient = CraftableProUser::find($recipientId);
+            $recipientIsStaff = $recipient
+                && $recipient->roles->pluck('name')->intersect($staffRoles)->isNotEmpty();
+
+            if (! $recipientIsStaff) {
+                $validator->errors()->add(
+                    'private_to_id',
+                    'You can only whisper staff members.',
                 );
             }
         });

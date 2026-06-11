@@ -83,6 +83,8 @@ class ChatController extends Controller
             ? $request->validated('private_to_id')
             : null;
 
+        
+
         $message = $conversation->messages()->create([
             'user_id'       => $user->id,
             'body'          => $request->validated('body'),
@@ -175,6 +177,7 @@ class ChatController extends Controller
                 'last_name'  => $u->last_name,
             ])
             ->values();
+
     }
 
 
@@ -185,12 +188,16 @@ class ChatController extends Controller
             'name'     => $conversation->name,
             'type'     => $conversation->type,
             'members'  => $conversation->members()
+                ->with('roles:id,name')
                 ->select('craftable_pro_users.id', 'first_name', 'last_name')
                 ->get()
                 ->map(fn (CraftableProUser $m) => [
                     'id'         => $m->id,
                     'first_name' => $m->first_name,
                     'last_name'  => $m->last_name,
+                    'is_staff'   => $m->roles->pluck('name')
+                        ->intersect($this->settings()->roles['staff'])
+                        ->isNotEmpty(),
                 ])
                 ->values(),
             'messages' => $conversation->messages()
