@@ -15,7 +15,7 @@ class StoreMessageRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        if (Gate::allows('craftable-pro.messages.create')) {
+        if (Gate::allows('craftable-pro.messages.create')){
             return true;
         }
 
