@@ -60,11 +60,7 @@ class StoreMessageRequest extends FormRequest
         ];
     }
 
-    /**
-     * Only a staff user (e.g. super-admin / account-manager) may start a whisper.
-     * Any other member may whisper back, but only to someone who has already
-     * whispered them in this conversation.
-     */
+
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
