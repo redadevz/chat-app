@@ -827,9 +827,7 @@ watch(activeId, scrollToBottom)
 // First render (direct page load on a conversation).
 onMounted(scrollToBottom)
 
-let subscribedChannel = null
-let internalChannel = null
-let whisperChannel = null
+let personalChannel = null
 
 function pushMessage(e) {
   if (threadMessages.value.some((m) => m.id === e.id)) return
@@ -847,75 +845,49 @@ function pushMessage(e) {
   })
 }
 
-function subscribe(id) {
-  unsubscribe()
-  if (!id) return
-  if (!window.Echo) {
-    console.warn('[chat] Echo not available — realtime disabled')
+function applyRead(e) {
+  // Another member read the conversation → update their last_read_at so my
+  // "Seen" marks refresh live.
+  const member = threadMembers.value.find((m) => m.id === e.user_id)
+  if (member) member.last_read_at = e.last_read_at
+}
+
+// One personal channel carries every message and read-receipt addressed to me,
+// for every conversation. The server only sends what I'm allowed to see, so we
+// just filter to the open thread before touching the UI.
+function subscribePersonal() {
+  if (personalChannel) return
+  if (!window.Echo || !currentUserId.value) {
+    if (!window.Echo) console.warn('[chat] Echo not available — realtime disabled')
     return
   }
-  subscribedChannel = `conversation.${id}`
-  console.log('[chat] subscribing to private-' + subscribedChannel)
-  window.Echo.private(subscribedChannel)
+  personalChannel = `whisper.${currentUserId.value}`
+  console.log('[chat] subscribing to private-' + personalChannel)
+  window.Echo.private(personalChannel)
     .listen('.message.sent', (e) => {
-      console.log('[chat] received message.sent', e)
-      pushMessage(e)
+      if (e.conversation_id === activeId.value) pushMessage(e)
     })
     .listen('.conversation.read', (e) => {
-      // Another member read the conversation → update their last_read_at so my
-      // "Seen" marks refresh live.
-      const member = threadMembers.value.find((m) => m.id === e.user_id)
-      if (member) member.last_read_at = e.last_read_at
+      if (e.conversation_id === activeId.value) applyRead(e)
     })
     .error((err) => console.error('[chat] channel error', err?.status, err?.type, err))
-
-  // Staff also listen on the internal channel for staff-only notes. Clients
-  // are rejected by the channel authorization, so they never reach this.
-  if (isStaff.value) {
-    internalChannel = `conversation.${id}.internal`
-    window.Echo.private(internalChannel)
-      .listen('.message.sent', (e) => {
-        console.log('[chat] received internal message.sent', e)
-        pushMessage(e)
-      })
-      .error((err) => console.error('[chat] internal channel error', err?.status, err?.type, err))
-  }
-
-  // Personal whisper channel — private replies addressed to me arrive here, not
-  // on the conversation channel. Only append the ones for the open conversation.
-  if (currentUserId.value) {
-    whisperChannel = `whisper.${currentUserId.value}`
-    window.Echo.private(whisperChannel)
-      .listen('.message.sent', (e) => {
-        console.log('[chat] received whisper.sent', e)
-        if (e.conversation_id === id) pushMessage(e)
-      })
-      .error((err) => console.error('[chat] whisper channel error', err?.status, err?.type, err))
-  }
 }
 
-function unsubscribe() {
-  if (subscribedChannel && window.Echo) {
-    window.Echo.leave(`private-${subscribedChannel}`)
+function unsubscribePersonal() {
+  if (personalChannel && window.Echo) {
+    window.Echo.leave(`private-${personalChannel}`)
   }
-  if (internalChannel && window.Echo) {
-    window.Echo.leave(`private-${internalChannel}`)
-  }
-  if (whisperChannel && window.Echo) {
-    window.Echo.leave(`private-${whisperChannel}`)
-  }
-  subscribedChannel = null
-  internalChannel = null
-  whisperChannel = null
+  personalChannel = null
 }
 
-watch(activeId, (id) => {
+watch(activeId, () => {
   composeMode.value = 'public'
   replyingTo.value = null
   whisperTo.value = null
   whisperPickerOpen.value = false
   openMenuId.value = null
-  subscribe(id)
 }, { immediate: true })
-onBeforeUnmount(unsubscribe)
+
+onMounted(subscribePersonal)
+onBeforeUnmount(unsubscribePersonal)
 </script>

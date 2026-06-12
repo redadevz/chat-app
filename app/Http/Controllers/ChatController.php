@@ -40,7 +40,6 @@ class ChatController extends Controller
         $user = $this->user();
 
         abort_if($this->isClient($user), 403);
-        abort_unless($user->can('craftable-pro.chat.access'), 403);
 
         return $this->render();
     }
@@ -50,7 +49,6 @@ class ChatController extends Controller
         $user = $this->user();
 
         abort_if($this->isClient($user), 403);
-        abort_unless($user->can('craftable-pro.chat.access'), 403);
 
         abort_unless(
             $this->isOversight($user) || $this->isMember($conversation, $user->id),
@@ -98,7 +96,10 @@ class ChatController extends Controller
 
         $conversation->touch();
 
-        broadcast(new MessageSent($message->load('sender', 'replyTo.sender', 'recipient')))->toOthers();
+        broadcast(new MessageSent(
+            $message->load('sender', 'replyTo.sender', 'recipient'),
+            $this->messageRecipientIds($conversation, $message),
+        ))->toOthers();
 
         if ($request->wantsJson()) {
             return response()->json([
@@ -261,7 +262,17 @@ class ChatController extends Controller
 
         // Only a real member's read counts as a receipt — tell the others live.
         if ($updated) {
-            broadcast(new ConversationRead($conversation->id, $this->userId(), $readAt->toIso8601String()))->toOthers();
+            $recipients = $this->audienceIds($conversation)
+                ->reject(fn (int $id) => $id === $this->userId())
+                ->values()
+                ->all();
+
+            broadcast(new ConversationRead(
+                $conversation->id,
+                $this->userId(),
+                $readAt->toIso8601String(),
+                $recipients,
+            ))->toOthers();
         }
     }
 
@@ -322,6 +333,46 @@ class ChatController extends Controller
     {
         $userId = $this->userId();
         abort_unless($this->isMember($conversation, $userId), 403);
+    }
+
+    /** Everyone who may see this conversation live: its members plus oversight users. */
+    private function audienceIds(Conversation $conversation): \Illuminate\Support\Collection
+    {
+        return $conversation->members()
+            ->pluck('craftable_pro_users.id')
+            ->merge(CraftableProUser::role($this->settings()->roles['oversight'])->pluck('id'))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * Whose personal channel receives a freshly sent message. We pick the exact
+     * recipients so an unauthorized socket never receives it: a whisper reaches
+     * only its two parties, an internal note only the staff in the audience.
+     *
+     * @return array<int>
+     */
+    private function messageRecipientIds(Conversation $conversation, Message $message): array
+    {
+        if ($message->private_to_id !== null) {
+            return array_values(array_unique([
+                (int) $message->user_id,
+                (int) $message->private_to_id,
+            ]));
+        }
+
+        $audience = $this->audienceIds($conversation);
+
+        if ($message->isInternal()) {
+            $audience = CraftableProUser::role($this->settings()->roles['staff'])
+                ->whereIn('id', $audience)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->values();
+        }
+
+        return $audience->all();
     }
 
     private function isMember(Conversation $conversation, int $userId): bool

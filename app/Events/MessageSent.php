@@ -16,37 +16,29 @@ class MessageSent implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public function __construct(public Message $message)
-    {
+    /**
+     * @param  array<int>  $recipientIds  users whose personal channel should receive this
+     */
+    public function __construct(
+        public Message $message,
+        public array $recipientIds,
+    ) {
     }
 
     /**
-     * Private channel scoped per conversation. Listeners must be members
-     * (see routes/channels.php).
+     * Every user listens on one personal channel; we deliver the message to the
+     * exact set of recipients computed by the controller. Because we choose who
+     * to broadcast to, an unauthorized user's socket never receives it at all —
+     * whispers reach only their two parties, internal notes only staff.
      */
     public function broadcastOn(): array
     {
-        $channels = app(ChatSettings::class)->channels;
+        $userPrefix = app(ChatSettings::class)->channels['user_prefix'];
 
-        // A whisper goes ONLY to the two parties' personal channels — never the
-        // conversation channel — so no other member can receive it over the wire.
-        if ($this->message->private_to_id !== null) {
-            $userPrefix = $channels['user_prefix'];
-
-            return [
-                new PrivateChannel("{$userPrefix}.{$this->message->user_id}"),
-                new PrivateChannel("{$userPrefix}.{$this->message->private_to_id}"),
-            ];
-        }
-
-        // Internal (staff-only) notes ride a separate channel that clients are
-        // not allowed to subscribe to, so they can never receive them.
-        $prefix = $channels['prefix'];
-        $suffix = $this->message->isInternal() ? $channels['internal_suffix'] : '';
-
-        return [
-            new PrivateChannel("{$prefix}.{$this->message->conversation_id}{$suffix}"),
-        ];
+        return array_map(
+            fn (int $id) => new PrivateChannel("{$userPrefix}.{$id}"),
+            $this->recipientIds,
+        );
     }
 
     /**

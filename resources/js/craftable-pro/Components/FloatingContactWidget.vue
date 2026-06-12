@@ -212,20 +212,21 @@ function scrollToBottom() {
   }
 }
 
-let subscribedChannel = null
+let personalChannel = null
 
-function subscribe(id) {
-  unsubscribe()
-  if (!id) return
-  if (!window.Echo) {
-    console.warn('[widget] Echo not available — realtime disabled')
+// I listen on my own personal channel; the support conversation's messages and
+// read receipts arrive here. Filter to my current conversation before applying.
+function subscribePersonal() {
+  if (personalChannel) return
+  if (!window.Echo || !currentUserId.value) {
+    if (!window.Echo) console.warn('[widget] Echo not available — realtime disabled')
     return
   }
-  subscribedChannel = `conversation.${id}`
-  console.log('[widget] subscribing to private-' + subscribedChannel)
-  window.Echo.private(subscribedChannel)
+  personalChannel = `whisper.${currentUserId.value}`
+  console.log('[widget] subscribing to private-' + personalChannel)
+  window.Echo.private(personalChannel)
     .listen('.message.sent', async (e) => {
-      console.log('[widget] received message.sent', e)
+      if (e.conversation_id !== conversationId.value) return
       if (messages.value.some((m) => m.id === e.id)) return
       messages.value.push({
         id: e.id,
@@ -237,6 +238,7 @@ function subscribe(id) {
       scrollToBottom()
     })
     .listen('.conversation.read', (e) => {
+      if (e.conversation_id !== conversationId.value) return
       // The account-manager read the conversation → refresh my "Seen" marks.
       if (supportUser.value && e.user_id === supportUser.value.id) {
         supportUser.value = { ...supportUser.value, last_read_at: e.last_read_at }
@@ -245,14 +247,14 @@ function subscribe(id) {
     .error((err) => console.error('[widget] channel error', err))
 }
 
-function unsubscribe() {
-  if (subscribedChannel && window.Echo) {
-    window.Echo.leave(`private-${subscribedChannel}`)
+function unsubscribePersonal() {
+  if (personalChannel && window.Echo) {
+    window.Echo.leave(`private-${personalChannel}`)
   }
-  subscribedChannel = null
+  personalChannel = null
 }
 
-watch(conversationId, (id) => subscribe(id))
+watch(currentUserId, () => subscribePersonal())
 
 // Keep the thread pinned to the latest message whenever the count changes
 // (load, optimistic send, or realtime push) while the widget is open.
@@ -264,5 +266,5 @@ watch(
   { flush: 'post' }
 )
 
-onBeforeUnmount(unsubscribe)
+onBeforeUnmount(unsubscribePersonal)
 </script>

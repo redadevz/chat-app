@@ -16,18 +16,25 @@ class ConversationRead implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    /**
+     * @param  array<int>  $recipientIds  the other members/oversight users to notify
+     */
     public function __construct(
         public int $conversationId,
         public int $userId,
         public string $readAt,
+        public array $recipientIds,
     ) {
     }
 
     public function broadcastOn(): array
     {
-        $prefix = app(ChatSettings::class)->channels['prefix'];
+        $userPrefix = app(ChatSettings::class)->channels['user_prefix'];
 
-        return [new PrivateChannel("{$prefix}.{$this->conversationId}")];
+        return array_map(
+            fn (int $id) => new PrivateChannel("{$userPrefix}.{$id}"),
+            $this->recipientIds,
+        );
     }
 
     public function broadcastAs(): string

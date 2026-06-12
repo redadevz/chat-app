@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\Conversation;
 use App\Settings\ChatSettings;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -10,17 +9,9 @@ Broadcast::routes([
 
 $channels = app(ChatSettings::class)->channels;
 
-// Conversation channel — members and oversight users.
-Broadcast::channel($channels['prefix'].'.{conversationId}', fn ($user, int $conversationId) =>
-    Conversation::find($conversationId)?->isVisibleTo($user) ?? false
-);
-
-// Staff-only internal-notes channel.
-Broadcast::channel($channels['prefix'].'.{conversationId}'.$channels['internal_suffix'], fn ($user, int $conversationId) =>
-    Conversation::find($conversationId)?->isInternalVisibleTo($user) ?? false
-);
-
-// Personal whisper channel — only the user themselves.
+// Every user listens on one personal channel — all messages and read receipts
+// for them are delivered here. Server-side recipient selection (ChatController)
+// enforces who may receive what, so this only needs to verify channel ownership.
 Broadcast::channel($channels['user_prefix'].'.{userId}', fn ($user, int $userId) =>
     (int) $user->id === $userId
 );
