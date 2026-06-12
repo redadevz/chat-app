@@ -62,6 +62,20 @@
                   :class="m.user_id === currentUserId ? 'bg-indigo-600 text-white' : 'bg-white/10 text-gray-100'"
                 >
                   <p class="whitespace-pre-wrap break-words">{{ m.body }}</p>
+                  <!-- Read receipt on my own messages: single check = sent, double = seen. -->
+                  <p
+                    v-if="m.user_id === currentUserId"
+                    class="mt-1 flex justify-end"
+                  >
+                    <span
+                      class="inline-flex items-center text-white/60"
+                      :class="isSeen(m) ? 'text-sky-300' : ''"
+                      :title="isSeen(m) ? 'Seen' : 'Sent'"
+                    >
+                      <CheckIcon class="h-3 w-3" />
+                      <CheckIcon v-if="isSeen(m)" class="-ml-1.5 h-3 w-3" />
+                    </span>
+                  </p>
                 </div>
               </li>
             </template>
@@ -97,7 +111,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import axios from 'axios'
 import { usePage } from '@inertiajs/vue3'
-import { ChatBubbleLeftRightIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { ChatBubbleLeftRightIcon, XMarkIcon, CheckIcon } from '@heroicons/vue/24/outline'
 
 const page = usePage()
 
@@ -128,6 +142,14 @@ const supportInitials = computed(() => {
     '?'
   )
 })
+
+// One of my messages is "seen" once the account-manager read past it.
+function isSeen(m) {
+  if (m.user_id !== currentUserId.value) return false
+  const read = supportUser.value?.last_read_at
+  if (!read || !m.created_at) return false
+  return new Date(read).getTime() >= new Date(m.created_at).getTime()
+}
 
 async function openModal() {
   open.value = true
@@ -213,6 +235,12 @@ function subscribe(id) {
       })
       await nextTick()
       scrollToBottom()
+    })
+    .listen('.conversation.read', (e) => {
+      // The account-manager read the conversation → refresh my "Seen" marks.
+      if (supportUser.value && e.user_id === supportUser.value.id) {
+        supportUser.value = { ...supportUser.value, last_read_at: e.last_read_at }
+      }
     })
     .error((err) => console.error('[widget] channel error', err))
 }

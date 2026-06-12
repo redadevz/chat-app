@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Events\ConversationRead;
 use App\Events\MessageSent;
 use App\Http\Requests\Chat\StoreChatRequest;
 use App\Http\Requests\CraftablePro\Message\StoreMessageRequest;
@@ -189,7 +190,6 @@ class ChatController extends Controller
             'type'     => $conversation->type,
             'members'  => $conversation->members()
                 ->with('roles:id,name')
-                ->select('craftable_pro_users.id', 'first_name', 'last_name')
                 ->get()
                 ->map(fn (CraftableProUser $m) => [
                     'id'         => $m->id,
@@ -198,6 +198,7 @@ class ChatController extends Controller
                     'is_staff'   => $m->roles->pluck('name')
                         ->intersect($this->settings()->roles['staff'])
                         ->isNotEmpty(),
+                    'last_read_at' => $m->pivot->last_read_at,
                 ])
                 ->values(),
             'messages' => $conversation->messages()
@@ -254,10 +255,16 @@ class ChatController extends Controller
 
     private function markAsRead(Conversation $conversation): void
     {
-        $conversation->members()->updateExistingPivot(
+        $readAt  = now();
+        $updated = $conversation->members()->updateExistingPivot(
             $this->userId(),
-            ['last_read_at' => now()],
-        ); 
+            ['last_read_at' => $readAt],
+        );
+
+        // Only a real member's read counts as a receipt — tell the others live.
+        if ($updated) {
+            broadcast(new ConversationRead($conversation->id, $this->userId(), $readAt->toIso8601String()))->toOthers();
+        }
     }
 
 
@@ -285,12 +292,18 @@ class ChatController extends Controller
         $supportUser = $conversation->members()
             ->role($this->settings()->roles['account_manager'])
             ->where('craftable_pro_users.id', '!=', $user->id)
-            ->select('craftable_pro_users.id', 'first_name', 'last_name')
-            ->first();  
+            ->first();
 
         return response()->json([
             'conversation_id' => $conversation->id,
-            'support_user'    => $supportUser?->only(['id', 'first_name', 'last_name']),
+            'support_user'    => $supportUser ? [
+                'id'           => $supportUser->id,
+                'first_name'   => $supportUser->first_name,
+                'last_name'    => $supportUser->last_name,
+                'last_read_at' => $supportUser->pivot->last_read_at
+                    ? \Illuminate\Support\Carbon::parse($supportUser->pivot->last_read_at)->toIso8601String()
+                    : null,
+            ] : null,
             'current_user_id' => $user->id,
             'messages'        => $conversation->messages()
                 ->public()

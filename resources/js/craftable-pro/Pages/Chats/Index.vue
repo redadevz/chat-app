@@ -223,8 +223,18 @@
               {{ senderName(m) }}
             </p>
             <p class="whitespace-pre-wrap break-words">{{ m.body }}</p>
-            <p class="mt-1 text-right text-[10px] opacity-60">
+            <p class="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-60">
               {{ formatTime(m.created_at) }}
+              <!-- Read receipt on my own messages: single check = sent, double = seen. -->
+              <span
+                v-if="m.user_id === currentUserId"
+                class="inline-flex items-center"
+                :class="isSeen(m) ? 'text-sky-300 opacity-100' : ''"
+                :title="isSeen(m) ? $t('craftable-pro', 'Seen') : $t('craftable-pro', 'Sent')"
+              >
+                <CheckIcon class="h-3 w-3" />
+                <CheckIcon v-if="isSeen(m)" class="-ml-1.5 h-3 w-3" />
+              </span>
             </p>
           </div>
         </li>
@@ -488,6 +498,7 @@ import {
   GlobeAltIcon,
   EllipsisVerticalIcon,
   ArrowUturnLeftIcon,
+  CheckIcon,
 } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
@@ -776,6 +787,28 @@ watch(
   { immediate: true, deep: false }
 )
 
+// Reactive copy of members so read-receipt updates re-render the "Seen" marks.
+const threadMembers = ref([])
+watch(
+  () => props.active?.members,
+  (members) => { threadMembers.value = members ? [...members] : [] },
+  { immediate: true, deep: false }
+)
+
+// The most recent time any OTHER member read this conversation.
+const othersLastReadAt = computed(() => {
+  const times = threadMembers.value
+    .filter((m) => m.id !== currentUserId.value && m.last_read_at)
+    .map((m) => new Date(m.last_read_at).getTime())
+  return times.length ? Math.max(...times) : 0
+})
+
+// One of my messages is "seen" once another member read past the time I sent it.
+function isSeen(m) {
+  if (m.user_id !== currentUserId.value || !m.created_at) return false
+  return othersLastReadAt.value >= new Date(m.created_at).getTime()
+}
+
 watch(
   () => threadMessages.value.length,
   () => nextTick(scrollToBottom),
@@ -817,6 +850,12 @@ function subscribe(id) {
     .listen('.message.sent', (e) => {
       console.log('[chat] received message.sent', e)
       pushMessage(e)
+    })
+    .listen('.conversation.read', (e) => {
+      // Another member read the conversation → update their last_read_at so my
+      // "Seen" marks refresh live.
+      const member = threadMembers.value.find((m) => m.id === e.user_id)
+      if (member) member.last_read_at = e.last_read_at
     })
     .error((err) => console.error('[chat] channel error', err?.status, err?.type, err))
 
