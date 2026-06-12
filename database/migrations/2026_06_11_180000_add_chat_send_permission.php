@@ -8,7 +8,7 @@ return new class extends Migration
 {
     private string $guard = 'craftable-pro';
 
-    private string $permission = 'craftable-pro.chat.send';
+    private string $permission = 'craftable-pro.chat.access';
 
     private array $roles = ['Administrator', 'super-admin', 'account-manager', 'client'];
 

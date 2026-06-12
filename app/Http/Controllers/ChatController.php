@@ -40,6 +40,7 @@ class ChatController extends Controller
         $user = $this->user();
 
         abort_if($this->isClient($user), 403);
+        abort_unless($user->can('craftable-pro.chat.access'), 403);
 
         return $this->render();
     }
@@ -49,7 +50,7 @@ class ChatController extends Controller
         $user = $this->user();
 
         abort_if($this->isClient($user), 403);
-
+        abort_unless($user->can('craftable-pro.chat.access'), 403);
 
         abort_unless(
             $this->isOversight($user) || $this->isMember($conversation, $user->id),

@@ -60,7 +60,11 @@ class Conversation extends Model
             'user_id',
         )
             ->withPivot('joined_at', 'last_read_at')
-            ->withTimestamps();
+            ->withTimestamps()
+            // A user only counts as a member while a role still grants them chat
+            // access — lose that permission and they drop out of the conversation
+            // everywhere (lists, access, realtime), reversibly.
+            ->whereHas('roles.permissions', fn ($q) => $q->where('name', 'craftable-pro.chat.access'));
     }
 
     public function scopeForUser(Builder $query, CraftableProUser $user): Builder
@@ -75,6 +79,10 @@ class Conversation extends Model
 
     public function isVisibleTo(CraftableProUser $user): bool
     {
+        if (! $user->can('craftable-pro.chat.access')) {
+            return false;
+        }
+
         $isOversight = $user->roles->pluck('name')
             ->intersect(app(ChatSettings::class)->roles['oversight'])
             ->isNotEmpty();

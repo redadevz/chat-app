@@ -27,9 +27,9 @@ class StoreMessageRequest extends FormRequest
             return false;
         }
 
-        // Sending is controlled by a role-granted permission: remove the role,
-        // lose the permission, and you can no longer text (still a member).
-        if (! $user->can('craftable-pro.chat.send')) {
+        // Using the chat is controlled by a role-granted permission: remove the
+        // role, lose the permission, and you can no longer text (still a member).
+        if (! $user->can('craftable-pro.chat.access')) {
             return false;
         }
 
