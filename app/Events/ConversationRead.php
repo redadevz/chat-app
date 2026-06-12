@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Events;
 
-use App\Settings\ChatSettings;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -29,10 +28,8 @@ class ConversationRead implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        $userPrefix = app(ChatSettings::class)->channels['user_prefix'];
-
         return array_map(
-            fn (int $id) => new PrivateChannel("{$userPrefix}.{$id}"),
+            fn (int $id) => new PrivateChannel("user.{$id}"),
             $this->recipientIds,
         );
     }

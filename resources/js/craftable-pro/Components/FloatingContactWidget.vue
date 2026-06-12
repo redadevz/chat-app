@@ -222,7 +222,7 @@ function subscribePersonal() {
     if (!window.Echo) console.warn('[widget] Echo not available — realtime disabled')
     return
   }
-  personalChannel = `whisper.${currentUserId.value}`
+  personalChannel = `user.${currentUserId.value}`
   console.log('[widget] subscribing to private-' + personalChannel)
   window.Echo.private(personalChannel)
     .listen('.message.sent', async (e) => {

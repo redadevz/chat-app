@@ -25,18 +25,11 @@ class MessageSent implements ShouldBroadcastNow
     ) {
     }
 
-    /**
-     * Every user listens on one personal channel; we deliver the message to the
-     * exact set of recipients computed by the controller. Because we choose who
-     * to broadcast to, an unauthorized user's socket never receives it at all —
-     * whispers reach only their two parties, internal notes only staff.
-     */
+
     public function broadcastOn(): array
     {
-        $userPrefix = app(ChatSettings::class)->channels['user_prefix'];
-
         return array_map(
-            fn (int $id) => new PrivateChannel("{$userPrefix}.{$id}"),
+            fn (int $id) => new PrivateChannel("user.{$id}"),
             $this->recipientIds,
         );
     }
