@@ -15,7 +15,8 @@ class StoreMessageRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        if (Gate::allows('craftable-pro.messages.create')){
+        // Admin "Messages" CRUD page (and any messages.create holder).
+        if (Gate::allows('craftable-pro.messages.create')) {
             return true;
         }
 
@@ -23,6 +24,12 @@ class StoreMessageRequest extends FormRequest
         $user         = auth('craftable-pro')->user();
 
         if (! $conversation || ! $user) {
+            return false;
+        }
+
+        // Sending is controlled by a role-granted permission: remove the role,
+        // lose the permission, and you can no longer text (still a member).
+        if (! $user->can('craftable-pro.chat.send')) {
             return false;
         }
 

@@ -68,6 +68,30 @@ class Conversation extends Model
         return $query->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $user->id));
     }
 
+    public function hasMember(CraftableProUser $user): bool
+    {
+        return $this->members()->where('craftable_pro_users.id', $user->id)->exists();
+    }
+
+    public function isVisibleTo(CraftableProUser $user): bool
+    {
+        $isOversight = $user->roles->pluck('name')
+            ->intersect(app(ChatSettings::class)->roles['oversight'])
+            ->isNotEmpty();
+
+        return $isOversight || $this->hasMember($user);
+    }
+
+    /** Who may read its internal (staff-only) notes. */
+    public function isInternalVisibleTo(CraftableProUser $user): bool
+    {
+        $isStaff = $user->roles->pluck('name')
+            ->intersect(app(ChatSettings::class)->roles['staff'])
+            ->isNotEmpty();
+
+        return $isStaff && $this->isVisibleTo($user);
+    }
+
     public function scopePrivateBetween(Builder $query, int $userA, int $userB): Builder
     {
         return $query

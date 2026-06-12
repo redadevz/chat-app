@@ -4,66 +4,23 @@ use App\Models\Conversation;
 use App\Settings\ChatSettings;
 use Illuminate\Support\Facades\Broadcast;
 
-
 Broadcast::routes([
     'middleware' => ['web', 'craftable-pro-base-middlewares', 'craftable-pro-auth-middleware'],
 ]);
 
-// Channel names come from the database (App\Settings\ChatSettings). This file is
-// loaded at boot — including during `migrate` on a fresh DB where the settings
-// don't exist yet — so fall back to defaults if they can't be resolved, otherwise
-// the app could never boot to run its own migrations.
-try {
-    $channels = app(ChatSettings::class)->channels;
-} catch (\Throwable $e) {
-    $channels = ['prefix' => 'conversation', 'internal_suffix' => '.internal', 'user_prefix' => 'whisper'];
-}
-$channelPrefix = $channels['prefix'];
+$channels = app(ChatSettings::class)->channels;
 
-Broadcast::channel($channelPrefix.'.{conversationId}', function ($user, int $conversationId) {
-    $conversation = Conversation::find($conversationId);
+// Conversation channel — members and oversight users.
+Broadcast::channel($channels['prefix'].'.{conversationId}', fn ($user, int $conversationId) =>
+    Conversation::find($conversationId)?->isVisibleTo($user) ?? false
+);
 
-    if (! $conversation) {
-        return false;
-    }
+// Staff-only internal-notes channel.
+Broadcast::channel($channels['prefix'].'.{conversationId}'.$channels['internal_suffix'], fn ($user, int $conversationId) =>
+    Conversation::find($conversationId)?->isInternalVisibleTo($user) ?? false
+);
 
-    $isMember = $conversation->members()
-        ->where('craftable_pro_users.id', $user->id)
-        ->exists();
-
-    // Oversight users watch any conversation live without being a member.
-    $isOversight = $user->roles->pluck('name')
-        ->intersect(app(ChatSettings::class)->roles['oversight'])
-        ->isNotEmpty();
-
-    return $isMember || $isOversight;
-});
-
-// Staff-only channel carrying internal notes. A subscriber must hold a staff
-// role AND either be a member or an oversight user — clients are excluded so
-// they can never receive an internal message, even over the wire.
-Broadcast::channel($channelPrefix.'.{conversationId}'.$channels['internal_suffix'], function ($user, int $conversationId) {
-    $conversation = Conversation::find($conversationId);
-
-    if (! $conversation) {
-        return false;
-    }
-
-    $isMember = $conversation->members()
-        ->where('craftable_pro_users.id', $user->id)
-        ->exists();
-
-    $roles       = $user->roles->pluck('name');
-    $chatRoles   = app(ChatSettings::class)->roles;
-    $isStaff     = $roles->intersect($chatRoles['staff'])->isNotEmpty();
-    $isOversight = $roles->intersect($chatRoles['oversight'])->isNotEmpty();
-
-    return $isStaff && ($isMember || $isOversight);
-});
-
-// Personal channel carrying private whispers. A user may only ever subscribe to
-// their OWN channel, so a whisper addressed to someone else can never reach them
-// — the wire-level guarantee behind "just between the two of you".
-Broadcast::channel($channels['user_prefix'].'.{userId}', function ($user, int $userId) {
-    return (int) $user->id === $userId;
-});
+// Personal whisper channel — only the user themselves.
+Broadcast::channel($channels['user_prefix'].'.{userId}', fn ($user, int $userId) =>
+    (int) $user->id === $userId
+);
