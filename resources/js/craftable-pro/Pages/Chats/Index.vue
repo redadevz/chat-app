@@ -486,7 +486,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Head, usePage, router } from '@inertiajs/vue3'
 import dayjs from 'dayjs'
 import {
@@ -775,15 +775,24 @@ function startChat(userId) {
 const threadMessages = ref([])
 const scrollEl = ref(null)
 
+// Jump to the latest message. Wait for the DOM to update (nextTick) AND for the
+// browser to lay it out (requestAnimationFrame) so scrollHeight is final.
 function scrollToBottom() {
-  if (scrollEl.value) {
-    scrollEl.value.scrollTop = scrollEl.value.scrollHeight
-  }
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      if (scrollEl.value) {
+        scrollEl.value.scrollTop = scrollEl.value.scrollHeight
+      }
+    })
+  })
 }
 
 watch(
   () => props.active?.messages,
-  (msgs) => { threadMessages.value = msgs ? [...msgs] : [] },
+  (msgs) => {
+    threadMessages.value = msgs ? [...msgs] : []
+    scrollToBottom() // land on the last message whenever a conversation opens
+  },
   { immediate: true, deep: false }
 )
 
@@ -809,13 +818,14 @@ function isSeen(m) {
   return othersLastReadAt.value >= new Date(m.created_at).getTime()
 }
 
-watch(
-  () => threadMessages.value.length,
-  () => nextTick(scrollToBottom),
-  { flush: 'post' }
-)
+// New incoming/sent messages (realtime push) → keep pinned to the bottom.
+watch(() => threadMessages.value.length, scrollToBottom)
 
-watch(activeId, () => nextTick(scrollToBottom))
+// Opening a different conversation → land on its last message.
+watch(activeId, scrollToBottom)
+
+// First render (direct page load on a conversation).
+onMounted(scrollToBottom)
 
 let subscribedChannel = null
 let internalChannel = null
