@@ -245,10 +245,7 @@ class ChatController extends Controller
         return [
             'id'     => $parent->id,
             'body'   => $parent->body,
-            'sender' => $parent->sender ? [
-                'first_name' => $parent->sender->first_name,
-                'last_name'  => $parent->sender->last_name,
-            ] : null,
+            'sender' => $parent->sender,
         ];
     }
 
