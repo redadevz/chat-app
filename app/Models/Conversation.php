@@ -64,10 +64,6 @@ class Conversation extends Model
         )
             ->withPivot('joined_at', 'last_read_at')
             ->withTimestamps()
-            // A user counts as a member only while they still hold a chat-granting
-            // role. Remove the role and they drop out of the conversation everywhere
-            // — lists, visibility, texting, realtime — reversibly: re-add the role
-            // and the pivot row makes them a member again.
             ->whereHas('roles', fn (Builder $q) => $q
                 ->where('guard_name', 'craftable-pro')
                 ->whereIn('name', $chatRoles));
