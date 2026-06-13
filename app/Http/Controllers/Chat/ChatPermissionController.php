@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Chat;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Chat\ChatPermissionRequest;
+use App\Http\Requests\CraftablePro\Chat\ChatPermissionRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Collection;
@@ -55,7 +55,7 @@ class ChatPermissionController extends Controller
             $role->syncPermissions($kept->merge($chosen)->all());
         }
 
-        return redirect()->back()->with(['message' => 'Chat permissions updated']);
+        return redirect()->back()->with(['message' => ___('craftable-pro', 'Chat permissions updated')]);
     }
 
     private function chatPermissions(): Collection

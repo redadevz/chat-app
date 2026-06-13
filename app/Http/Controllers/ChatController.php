@@ -6,7 +6,11 @@ namespace App\Http\Controllers;
 
 use App\Events\ConversationRead;
 use App\Events\MessageSent;
-use App\Http\Requests\Chat\StoreChatRequest;
+use App\Http\Requests\CraftablePro\Chat\IndexChatRequest;
+use App\Http\Requests\CraftablePro\Chat\LeaveChatRequest;
+use App\Http\Requests\CraftablePro\Chat\ShowChatRequest;
+use App\Http\Requests\CraftablePro\Chat\StoreChatRequest;
+use App\Http\Requests\CraftablePro\Chat\SupportChatRequest;
 use App\Http\Requests\CraftablePro\Message\StoreMessageRequest;
 use App\Models\Conversation;
 use App\Models\Message;
@@ -20,12 +24,7 @@ use Spatie\Permission\Models\Role;
 class ChatController extends Controller
 {
 
-    private function user(): CraftableProUser
-    {
-        return auth('craftable-pro')->user();
-    }
-
-    private function userId(): int
+    private function user(): int
     {
         return auth('craftable-pro')->id();
     }
@@ -35,25 +34,14 @@ class ChatController extends Controller
         return app(ChatSettings::class);
     }
 
-    public function index(): Response
+    public function index(IndexChatRequest $request): Response
     {
-        $user = $this->user();
-
-        abort_if($this->isClient($user), 403);
-
         return $this->render();
     }
 
-    public function show(Conversation $conversation): Response
+    public function show(ShowChatRequest $request, Conversation $conversation): Response
     {
-        $user = $this->user();
-
-        abort_if($this->isClient($user), 403);
-
-        abort_unless(
-            $this->isOversight($user) || $this->isMember($conversation, $user->id),
-            403,
-        );
+        $conversation->load('members.roles');
 
         $this->markAsRead($conversation);
 
@@ -172,8 +160,6 @@ class ChatController extends Controller
             ->select('id', 'first_name', 'last_name')
             ->orderBy('first_name')
             ->get()
-            // Map to plain arrays so serializing doesn't trigger the user model's
-            // appended avatar/media attributes (which would cause an N+1 of media queries).
             ->map(fn (CraftableProUser $u) => [
                 'id'         => $u->id,
                 'first_name' => $u->first_name,
@@ -190,9 +176,7 @@ class ChatController extends Controller
             'id'       => $conversation->id,
             'name'     => $conversation->name,
             'type'     => $conversation->type,
-            'members'  => $conversation->members()
-                ->with('roles:id,name')
-                ->get()
+            'members'  => $conversation->members
                 ->map(fn (CraftableProUser $m) => [
                     'id'         => $m->id,
                     'first_name' => $m->first_name,
@@ -277,18 +261,15 @@ class ChatController extends Controller
     }
 
 
-    public function leave(Conversation $conversation): RedirectResponse
+    public function leave(LeaveChatRequest $request, Conversation $conversation): RedirectResponse
     {
-        $this->ensureMember($conversation);
-
         return redirect()->route('chats.index');
     }
 
 
-    public function support(): \Illuminate\Http\JsonResponse
+    public function support(SupportChatRequest $request): \Illuminate\Http\JsonResponse
     {
         $user = $this->user();
-        abort_unless($this->isClient($user), 403);
 
         $conversation = Conversation::supportFor($user);
 
@@ -329,17 +310,11 @@ class ChatController extends Controller
         ]);
     }
 
-    private function ensureMember(Conversation $conversation): void
-    {
-        $userId = $this->userId();
-        abort_unless($this->isMember($conversation, $userId), 403);
-    }
-
     /** Everyone who may see this conversation live: its members plus oversight users. */
     private function audienceIds(Conversation $conversation): \Illuminate\Support\Collection
     {
-        return $conversation->members()
-            ->pluck('craftable_pro_users.id')
+        return $conversation->members
+            ->pluck('id')
             ->merge(CraftableProUser::role($this->settings()->roles['oversight'])->pluck('id'))
             ->map(fn ($id) => (int) $id)
             ->unique()
@@ -373,16 +348,6 @@ class ChatController extends Controller
         }
 
         return $audience->all();
-    }
-
-    private function isMember(Conversation $conversation, int $userId): bool
-    {
-        return $conversation->members()->where('craftable_pro_users.id', $userId)->exists();
-    }
-
-    private function isClient(CraftableProUser $user): bool
-    {
-        return $user->roles->pluck('name')->contains($this->settings()->roles['client']);
     }
 
     private function isOversight(CraftableProUser $user): bool

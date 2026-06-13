@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Requests\Chat;
+namespace App\Http\Requests\CraftablePro\Chat;
 
 use Brackets\CraftablePro\Models\CraftableProUser;
 use Illuminate\Foundation\Http\FormRequest;
