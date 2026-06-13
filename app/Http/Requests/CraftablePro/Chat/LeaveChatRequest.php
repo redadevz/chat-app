@@ -10,16 +10,11 @@ class LeaveChatRequest extends ChatRequest
 {
     public function authorize(): bool
     {
-        $user         = auth('craftable-pro')->user();
+        $user         = $this->authUser();
         $conversation = $this->route('conversation');
 
         return $user !== null
             && $conversation instanceof Conversation
-            && $this->isMember($conversation, $user->id);
-    }
-
-    public function rules(): array
-    {
-        return [];
+            && $conversation->hasMember($user);
     }
 }

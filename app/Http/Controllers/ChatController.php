@@ -16,22 +16,33 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Settings\ChatSettings;
 use Brackets\CraftablePro\Models\CraftableProUser;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Role;
 
 class ChatController extends Controller
 {
-
-    private function user(): int
+    private function user(): CraftableProUser
     {
-        return auth('craftable-pro')->id();
+        return auth('craftable-pro')->user();
     }
 
     private function settings(): ChatSettings
     {
         return app(ChatSettings::class);
+    }
+
+    private function isStaff(CraftableProUser $user): bool
+    {
+        return $user->hasAnyRole($this->settings()->roles['staff']);
+    }
+
+    private function isOversight(CraftableProUser $user): bool
+    {
+        return $user->hasAnyRole($this->settings()->roles['oversight']);
     }
 
     public function index(IndexChatRequest $request): Response
@@ -50,15 +61,15 @@ class ChatController extends Controller
 
     public function store(StoreChatRequest $request): RedirectResponse
     {
-        $user  = $this->user();
-        $other = $request->validated('user_id');
-
-        $conversation = Conversation::findOrCreatePrivateBetween($user, $other);
+        $conversation = Conversation::findOrCreatePrivateBetween(
+            $this->user(),
+            $request->validated('user_id'),
+        );
 
         return redirect()->route('chats.show', $conversation);
     }
 
-    public function storeMessage(StoreMessageRequest $request, Conversation $conversation, ChatSettings $settings): RedirectResponse|\Illuminate\Http\JsonResponse
+    public function storeMessage(StoreMessageRequest $request, Conversation $conversation, ChatSettings $settings): RedirectResponse|JsonResponse
     {
         $user = $this->user();
 
@@ -67,19 +78,13 @@ class ChatController extends Controller
             $visibility = $settings->visibility['public'];
         }
 
-        $privateToId = $settings->whispers_enabled
-            ? $request->validated('private_to_id')
-            : null;
-
-        
-
         $message = $conversation->messages()->create([
             'user_id'       => $user->id,
             'body'          => $request->validated('body'),
             'type'          => $settings->message_default_type,
             'visibility'    => $visibility,
             'reply_to_id'   => $request->validated('reply_to_id'),
-            'private_to_id' => $privateToId,
+            'private_to_id' => $settings->whispers_enabled ? $request->validated('private_to_id') : null,
         ]);
 
         $conversation->touch();
@@ -92,13 +97,13 @@ class ChatController extends Controller
         if ($request->wantsJson()) {
             return response()->json([
                 'message' => [
-                    'id'          => $message->id,
-                    'body'        => $message->body,
-                    'user_id'     => $message->user_id,
-                    'visibility'  => $message->visibility,
-                    'reply_to_id' => $message->reply_to_id,
-                    'private_to_id' => $message->private_to_id,
-                    'created_at'  => $message->created_at,
+                    'id'              => $message->id,
+                    'body'            => $message->body,
+                    'user_id'         => $message->user_id,
+                    'visibility'      => $message->visibility,
+                    'reply_to_id'     => $message->reply_to_id,
+                    'private_to_id'   => $message->private_to_id,
+                    'created_at'      => $message->created_at,
                     'conversation_id' => $message->conversation_id,
                 ],
             ]);
@@ -107,6 +112,50 @@ class ChatController extends Controller
         return redirect()->route('chats.show', $conversation);
     }
 
+    public function leave(LeaveChatRequest $request, Conversation $conversation): RedirectResponse
+    {
+        return redirect()->route('chats.index');
+    }
+
+    public function support(SupportChatRequest $request): JsonResponse
+    {
+        $user         = $this->user();
+        $conversation = Conversation::supportFor($user);
+
+        if (! $conversation) {
+            return response()->json(['conversation_id' => null, 'support_user' => null, 'messages' => []]);
+        }
+
+        $this->markAsRead($conversation);
+
+        $supportUser = $conversation->members()
+            ->role($this->settings()->roles['account_manager'])
+            ->where('craftable_pro_users.id', '!=', $user->id)
+            ->first();
+
+        return response()->json([
+            'conversation_id' => $conversation->id,
+            'support_user'    => $supportUser ? [
+                ...$this->basicUser($supportUser),
+                'last_read_at' => $supportUser->pivot->last_read_at
+                    ? Carbon::parse($supportUser->pivot->last_read_at)->toIso8601String()
+                    : null,
+            ] : null,
+            'current_user_id' => $user->id,
+            'messages'        => $conversation->messages()
+                ->public()
+                ->visibleTo($user->id)
+                ->with('sender:id,first_name,last_name')
+                ->oldest()
+                ->get()
+                ->map(fn (Message $m) => [
+                    'id'         => $m->id,
+                    'body'       => $m->body,
+                    'user_id'    => $m->user_id,
+                    'created_at' => $m->created_at?->toIso8601String(),
+                ]),
+        ]);
+    }
 
     private function render(?Conversation $active = null): Response
     {
@@ -120,10 +169,8 @@ class ChatController extends Controller
         ]);
     }
 
-
     private function conversationsListFor(CraftableProUser $user)
     {
-
         $query = $this->isOversight($user)
             ? Conversation::query()
             : Conversation::forUser($user);
@@ -141,11 +188,7 @@ class ChatController extends Controller
                 'type'         => $c->type,
                 'updated_at'   => $c->updated_at?->toIso8601String(),
                 'last_message' => $c->latestMessage?->only(['id', 'body', 'created_at']),
-                'members'      => $c->members->map(fn ($m) => [
-                    'id'         => $m->id,
-                    'first_name' => $m->first_name,
-                    'last_name'  => $m->last_name,
-                ])->values(),
+                'members'      => $c->members->map(fn (CraftableProUser $m) => $this->basicUser($m))->values(),
             ])
             ->values();
     }
@@ -160,15 +203,9 @@ class ChatController extends Controller
             ->select('id', 'first_name', 'last_name')
             ->orderBy('first_name')
             ->get()
-            ->map(fn (CraftableProUser $u) => [
-                'id'         => $u->id,
-                'first_name' => $u->first_name,
-                'last_name'  => $u->last_name,
-            ])
+            ->map(fn (CraftableProUser $u) => $this->basicUser($u))
             ->values();
-
     }
-
 
     private function threadPayloadFor(Conversation $conversation, int $viewerId): array
     {
@@ -178,12 +215,8 @@ class ChatController extends Controller
             'type'     => $conversation->type,
             'members'  => $conversation->members
                 ->map(fn (CraftableProUser $m) => [
-                    'id'         => $m->id,
-                    'first_name' => $m->first_name,
-                    'last_name'  => $m->last_name,
-                    'is_staff'   => $m->roles->pluck('name')
-                        ->intersect($this->settings()->roles['staff'])
-                        ->isNotEmpty(),
+                    ...$this->basicUser($m),
+                    'is_staff'     => $this->isStaff($m),
                     'last_read_at' => $m->pivot->last_read_at,
                 ])
                 ->values(),
@@ -198,24 +231,16 @@ class ChatController extends Controller
                 ->oldest()
                 ->get()
                 ->map(fn (Message $m) => [
-                    'id'          => $m->id,
-                    'body'        => $m->body,
-                    'user_id'     => $m->user_id,
-                    'visibility'  => $m->visibility,
-                    'reply_to_id' => $m->reply_to_id,
-                    'reply_to'    => $this->replyToPayload($m),
+                    'id'            => $m->id,
+                    'body'          => $m->body,
+                    'user_id'       => $m->user_id,
+                    'visibility'    => $m->visibility,
+                    'reply_to_id'   => $m->reply_to_id,
+                    'reply_to'      => $this->replyToPayload($m),
                     'private_to_id' => $m->private_to_id,
-                    'recipient'   => $m->recipient ? [
-                        'id'         => $m->recipient->id,
-                        'first_name' => $m->recipient->first_name,
-                        'last_name'  => $m->recipient->last_name,
-                    ] : null,
-                    'created_at'  => $m->created_at?->toIso8601String(),
-                    'sender'      => $m->sender ? [
-                        'id'         => $m->sender->id,
-                        'first_name' => $m->sender->first_name,
-                        'last_name'  => $m->sender->last_name,
-                    ] : null,
+                    'recipient'     => $this->basicUser($m->recipient),
+                    'created_at'    => $m->created_at?->toIso8601String(),
+                    'sender'        => $this->basicUser($m->sender),
                 ]),
         ];
     }
@@ -231,83 +256,33 @@ class ChatController extends Controller
         return [
             'id'     => $parent->id,
             'body'   => $parent->body,
-            'sender' => $parent->sender,
+            'sender' => $this->basicUser($parent->sender),
         ];
     }
 
-
     private function markAsRead(Conversation $conversation): void
     {
+        $userId  = $this->user()->id;
         $readAt  = now();
         $updated = $conversation->members()->updateExistingPivot(
-            $this->userId(),
+            $userId,
             ['last_read_at' => $readAt],
         );
 
         // Only a real member's read counts as a receipt — tell the others live.
         if ($updated) {
             $recipients = $this->audienceIds($conversation)
-                ->reject(fn (int $id) => $id === $this->userId())
+                ->reject(fn (int $id) => $id === $userId)
                 ->values()
                 ->all();
 
             broadcast(new ConversationRead(
                 $conversation->id,
-                $this->userId(),
+                $userId,
                 $readAt->toIso8601String(),
                 $recipients,
             ))->toOthers();
         }
-    }
-
-
-    public function leave(LeaveChatRequest $request, Conversation $conversation): RedirectResponse
-    {
-        return redirect()->route('chats.index');
-    }
-
-
-    public function support(SupportChatRequest $request): \Illuminate\Http\JsonResponse
-    {
-        $user = $this->user();
-
-        $conversation = Conversation::supportFor($user);
-
-        if (! $conversation) {
-            return response()->json(['conversation_id' => null, 'support_user' => null, 'messages' => []]);
-        }
-
-        $this->markAsRead($conversation);
-
-        $supportUser = $conversation->members()
-            ->role($this->settings()->roles['account_manager'])
-            ->where('craftable_pro_users.id', '!=', $user->id)
-            ->first();
-
-        return response()->json([
-            'conversation_id' => $conversation->id,
-            'support_user'    => $supportUser ? [
-                'id'           => $supportUser->id,
-                'first_name'   => $supportUser->first_name,
-                'last_name'    => $supportUser->last_name,
-                'last_read_at' => $supportUser->pivot->last_read_at
-                    ? \Illuminate\Support\Carbon::parse($supportUser->pivot->last_read_at)->toIso8601String()
-                    : null,
-            ] : null,
-            'current_user_id' => $user->id,
-            'messages'        => $conversation->messages()
-                ->public()
-                ->visibleTo($user->id)
-                ->with('sender:id,first_name,last_name')
-                ->oldest()
-                ->get()
-                ->map(fn (Message $m) => [
-                    'id'         => $m->id,
-                    'body'       => $m->body,
-                    'user_id'    => $m->user_id,
-                    'created_at' => $m->created_at?->toIso8601String(),
-                ]),
-        ]);
     }
 
     /** Everyone who may see this conversation live: its members plus oversight users. */
@@ -350,21 +325,6 @@ class ChatController extends Controller
         return $audience->all();
     }
 
-    private function isOversight(CraftableProUser $user): bool
-    {
-        return $user->roles->pluck('name')
-            ->intersect($this->settings()->roles['oversight'])
-            ->isNotEmpty();
-    }
-
-    private function isStaff(CraftableProUser $user): bool
-    {
-        return $user->roles->pluck('name')
-            ->intersect($this->settings()->roles['staff'])
-            ->isNotEmpty();
-    }
-
-    
     private function allowedTargetRolesFor(CraftableProUser $user): array
     {
         if ($user->can('craftable-pro.chat.message-everyone')) {
@@ -377,5 +337,25 @@ class ChatController extends Controller
             ->filter(fn (string $role) => $user->can("craftable-pro.chat.message-{$role}"))
             ->values()
             ->all();
+    }
+
+    /**
+     * The minimal user shape the chat UI needs everywhere. Returning plain arrays
+     * (rather than the model) keeps the appended avatar/media attributes from
+     * triggering an N+1 of media queries during serialization.
+     *
+     * @return ($user is null ? null : array{id: int, first_name: string, last_name: string})
+     */
+    private function basicUser(?CraftableProUser $user): ?array
+    {
+        if ($user === null) {
+            return null;
+        }
+
+        return [
+            'id'         => $user->id,
+            'first_name' => $user->first_name,
+            'last_name'  => $user->last_name,
+        ];
     }
 }

@@ -8,13 +8,8 @@ class SupportChatRequest extends ChatRequest
 {
     public function authorize(): bool
     {
-        $user = auth('craftable-pro')->user();
+        $user = $this->authUser();
 
         return $user !== null && $this->isClient($user);
-    }
-
-    public function rules(): array
-    {
-        return [];
     }
 }

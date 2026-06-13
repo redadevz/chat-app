@@ -10,22 +10,12 @@ class ShowChatRequest extends ChatRequest
 {
     public function authorize(): bool
     {
-        $user         = auth('craftable-pro')->user();
+        $user         = $this->authUser();
         $conversation = $this->route('conversation');
 
-        if (! $user || ! $conversation instanceof Conversation) {
-            return false;
-        }
-
-        if ($this->isClient($user)) {
-            return false;
-        }
-
-        return $this->isOversight($user) || $this->isMember($conversation, $user->id);
-    }
-
-    public function rules(): array
-    {
-        return [];
+        return $user !== null
+            && $conversation instanceof Conversation
+            && ! $this->isClient($user)
+            && $conversation->isVisibleTo($user);
     }
 }

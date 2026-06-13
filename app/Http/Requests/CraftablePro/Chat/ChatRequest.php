@@ -4,34 +4,24 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\CraftablePro\Chat;
 
-use App\Models\Conversation;
 use App\Settings\ChatSettings;
 use Brackets\CraftablePro\Models\CraftableProUser;
 use Illuminate\Foundation\Http\FormRequest;
 
 abstract class ChatRequest extends FormRequest
 {
-    protected function settings(): ChatSettings
+    protected function authUser(): ?CraftableProUser
     {
-        return app(ChatSettings::class);
+        return auth('craftable-pro')->user();
     }
 
     protected function isClient(CraftableProUser $user): bool
     {
-        return $user->roles->pluck('name')->contains($this->settings()->roles['client']);
+        return $user->hasRole(app(ChatSettings::class)->roles['client']);
     }
 
-    protected function isOversight(CraftableProUser $user): bool
+    public function rules(): array
     {
-        return $user->roles->pluck('name')
-            ->intersect($this->settings()->roles['oversight'])
-            ->isNotEmpty();
-    }
-
-    protected function isMember(Conversation $conversation, int $userId): bool
-    {
-        return $conversation->members()
-            ->where('craftable_pro_users.id', $userId)
-            ->exists();
+        return [];
     }
 }

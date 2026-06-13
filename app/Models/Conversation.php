@@ -81,21 +81,13 @@ class Conversation extends Model
 
     public function isVisibleTo(CraftableProUser $user): bool
     {
-        $isOversight = $user->roles->pluck('name')
-            ->intersect(app(ChatSettings::class)->roles['oversight'])
-            ->isNotEmpty();
-
-        return $isOversight || $this->hasMember($user);
+        return $user->hasAnyRole(app(ChatSettings::class)->roles['oversight']) || $this->hasMember($user);
     }
 
     /** Who may read its internal (staff-only) notes. */
     public function isInternalVisibleTo(CraftableProUser $user): bool
     {
-        $isStaff = $user->roles->pluck('name')
-            ->intersect(app(ChatSettings::class)->roles['staff'])
-            ->isNotEmpty();
-
-        return $isStaff && $this->isVisibleTo($user);
+        return $user->hasAnyRole(app(ChatSettings::class)->roles['staff']) && $this->isVisibleTo($user);
     }
 
     public function scopePrivateBetween(Builder $query, int $userA, int $userB): Builder
