@@ -34,19 +34,13 @@ class MessageSent implements ShouldBroadcastNow
         );
     }
 
-    /**
-     * Shorter, stable event name on the client. Without this, Echo expects
-     * the FQCN ("App\\Events\\MessageSent").
-     */
+
     public function broadcastAs(): string
     {
         return 'message.sent';
     }
 
-    /**
-     * The payload sent to subscribers. Keep it flat — same shape as the REST
-     * API response so the Vue list can append without transformation.
-     */
+
     public function broadcastWith(): array
     {
         return [
