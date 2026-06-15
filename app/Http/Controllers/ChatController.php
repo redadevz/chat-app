@@ -73,29 +73,13 @@ class ChatController extends Controller
         return redirect()->route('chats.show', $conversation);
     }
 
-    public function storeMessage(StoreMessageRequest $request, Conversation $conversation, ChatSettings $settings): RedirectResponse|JsonResponse
+    public function storeMessage(StoreMessageRequest $request, Conversation $conversation): RedirectResponse|JsonResponse
     {
-        $user = $this->user();
-
-        $visibility = $request->validated('visibility', $settings->default_visibility);
-        if ($visibility === $settings->visibility['internal'] && ! $this->isStaff($user)) {
-            $visibility = $settings->visibility['public'];
-        }
-
-        $message = $conversation->messages()->create([
-            'user_id'       => $user->id,
-            'body'          => $request->validated('body'),
-            'type'          => $settings->message_default_type,
-            'visibility'    => $visibility,
-            'reply_to_id'   => $request->validated('reply_to_id'),
-            'private_to_id' => $settings->whispers_enabled ? $request->validated('private_to_id') : null,
-        ]);
-
-        $conversation->touch();
+        $message = $conversation->postMessage($this->user(), $request->validated());
 
         broadcast(new MessageSent(
             $message->load('sender', 'replyTo.sender', 'recipient'),
-            $this->messageRecipientIds($conversation, $message),
+            $conversation->recipientIdsFor($message),
         ))->toOthers();
 
         if ($request->wantsJson()) {
@@ -276,67 +260,25 @@ class ChatController extends Controller
 
     private function markAsRead(Conversation $conversation): void
     {
-        $userId  = $this->user()->id;
-        $readAt  = now();
-        $updated = $conversation->members()->updateExistingPivot(
-            $userId,
-            ['last_read_at' => $readAt],
-        );
+        $user   = $this->user();
+        $readAt = $conversation->markReadBy($user);
 
         // Only a real member's read counts as a receipt — tell the others live.
-        if ($updated) {
-            $recipients = $this->audienceIds($conversation)
-                ->reject(fn (int $id) => $id === $userId)
-                ->values()
-                ->all();
-
-            broadcast(new ConversationRead(
-                $conversation->id,
-                $userId,
-                $readAt->toIso8601String(),
-                $recipients,
-            ))->toOthers();
-        }
-    }
-
-    /** Everyone who may see this conversation live: its members plus oversight users. */
-    private function audienceIds(Conversation $conversation): \Illuminate\Support\Collection
-    {
-        return $conversation->members
-            ->pluck('id')
-            ->merge(CraftableProUser::role($this->settings()->roles['oversight'])->pluck('id'))
-            ->map(fn ($id) => (int) $id)
-            ->unique()
-            ->values();
-    }
-
-    /**
-     * Whose personal channel receives a freshly sent message. We pick the exact
-     * recipients so an unauthorized socket never receives it: a whisper reaches
-     * only its two parties, an internal note only the staff in the audience.
-     *
-     * @return array<int>
-     */
-    private function messageRecipientIds(Conversation $conversation, Message $message): array
-    {
-        if ($message->private_to_id !== null) {
-            return array_values(array_unique([
-                (int) $message->user_id,
-                (int) $message->private_to_id,
-            ]));
+        if (! $readAt) {
+            return;
         }
 
-        $audience = $this->audienceIds($conversation);
+        $recipients = $conversation->audienceIds()
+            ->reject(fn (int $id) => $id === $user->id)
+            ->values()
+            ->all();
 
-        if ($message->isInternal()) {
-            $audience = CraftableProUser::role($this->settings()->roles['staff'])
-                ->whereIn('id', $audience)
-                ->pluck('id')
-                ->map(fn ($id) => (int) $id)
-                ->values();
-        }
-
-        return $audience->all();
+        broadcast(new ConversationRead(
+            $conversation->id,
+            $user->id,
+            $readAt->toIso8601String(),
+            $recipients,
+        ))->toOthers();
     }
 
     private function allowedTargetRolesFor(CraftableProUser $user): array

@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 
@@ -88,6 +90,82 @@ class Conversation extends Model
     public function isInternalVisibleTo(CraftableProUser $user): bool
     {
         return $user->hasAnyRole(app(ChatSettings::class)->roles['staff']) && $this->isVisibleTo($user);
+    }
+
+    /** Create a message here, applying the chat visibility rules. */
+    public function postMessage(CraftableProUser $sender, array $data): Message
+    {
+        $settings   = app(ChatSettings::class);
+        $visibility = $data['visibility'] ?? $settings->default_visibility;
+
+        // Only staff may post internal notes; anyone else is forced public.
+        if ($visibility === $settings->visibility['internal'] && ! $sender->hasAnyRole($settings->roles['staff'])) {
+            $visibility = $settings->visibility['public'];
+        }
+
+        $message = $this->messages()->create([
+            'user_id'       => $sender->id,
+            'body'          => $data['body'],
+            'type'          => $settings->message_default_type,
+            'visibility'    => $visibility,
+            'reply_to_id'   => $data['reply_to_id'] ?? null,
+            'private_to_id' => $settings->whispers_enabled ? ($data['private_to_id'] ?? null) : null,
+        ]);
+
+        $this->touch();
+
+        return $message;
+    }
+
+    /** Record that the user has read up to now; returns the timestamp, or null if they aren't a member. */
+    public function markReadBy(CraftableProUser $user): ?Carbon
+    {
+        $readAt = now();
+
+        return $this->members()->updateExistingPivot($user->id, ['last_read_at' => $readAt])
+            ? $readAt
+            : null;
+    }
+
+    /** Everyone who may see this conversation live: its members plus oversight users. */
+    public function audienceIds(): Collection
+    {
+        return $this->members
+            ->pluck('id')
+            ->merge(CraftableProUser::role(app(ChatSettings::class)->roles['oversight'])->pluck('id'))
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+    }
+
+    /**
+     * Whose personal channel receives a freshly sent message. We pick the exact
+     * recipients so an unauthorized socket never receives it: a whisper reaches
+     * only its two parties, an internal note only the staff in the audience.
+     *
+     * @return array<int>
+     */
+    public function recipientIdsFor(Message $message): array
+    {
+        if ($message->private_to_id !== null) {
+            return array_values(array_unique([
+                (int) $message->user_id,
+                (int) $message->private_to_id,
+            ]));
+        }
+
+        $audience = $this->audienceIds();
+
+        if ($message->isInternal()) {
+            return CraftableProUser::role(app(ChatSettings::class)->roles['staff'])
+                ->whereIn('id', $audience)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all();
+        }
+
+        return $audience->all();
     }
 
     public function scopePrivateBetween(Builder $query, int $userA, int $userB): Builder
