@@ -68,7 +68,7 @@ class Conversation extends Model
             ->withTimestamps()
             ->whereHas('roles', fn (Builder $q) => $q
                 ->where('guard_name', 'craftable-pro')
-                ->whereIn('name', $chatRoles));
+                ->whereIn('id', $chatRoles));
     }
 
     public function scopeForUser(Builder $query, CraftableProUser $user): Builder
@@ -118,13 +118,19 @@ class Conversation extends Model
     }
 
     /** Record that the user has read up to now; returns the timestamp, or null if they aren't a member. */
-    public function markReadBy(CraftableProUser $user): ?Carbon
+    public function markReadBy(int $userId): ?Carbon
     {
         $readAt = now();
 
-        return $this->members()->updateExistingPivot($user->id, ['last_read_at' => $readAt])
+        return $this->members()->updateExistingPivot($userId, ['last_read_at' => $readAt])
             ? $readAt
             : null;
+    }
+
+    /** Remove a member from this conversation. */
+    public function removeMember(int $userId): void
+    {
+        $this->members()->detach($userId);
     }
 
     /** Everyone who may see this conversation live: its members plus oversight users. */

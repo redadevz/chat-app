@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\CraftablePro\Message;
 
-use App\Models\Conversation;
 use App\Settings\ChatSettings;
 use Brackets\CraftablePro\Models\CraftableProUser;
 use Illuminate\Contracts\Validation\Validator;
@@ -16,17 +15,7 @@ class StoreMessageRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Admin "Messages" CRUD page (and any messages.create holder).
-        if (Gate::allows('craftable-pro.messages.create')) {
-            return true;
-        }
-
-        $conversation = $this->route('conversation');
-        $user         = auth('craftable-pro')->user();
-
-        return $conversation instanceof Conversation
-            && $user !== null
-            && $conversation->isVisibleTo($user);
+        return Gate::allows('sendMessage', $this->route('conversation'));
     }
 
     public function rules(): array

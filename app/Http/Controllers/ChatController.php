@@ -34,19 +34,14 @@ class ChatController extends Controller
         return auth('craftable-pro')->user();
     }
 
+    private function userId(): int
+    {
+        return (int) $this->user()->id;
+    }
+
     private function settings(): ChatSettings
     {
         return app(ChatSettings::class);
-    }
-
-    private function isStaff(CraftableProUser $user): bool
-    {
-        return $user->hasAnyRole($this->settings()->roles['staff']);
-    }
-
-    private function isOversight(CraftableProUser $user): bool
-    {
-        return $user->hasAnyRole($this->settings()->roles['oversight']);
     }
 
     public function index(IndexChatRequest $request): Response
@@ -102,6 +97,8 @@ class ChatController extends Controller
 
     public function leave(LeaveChatRequest $request, Conversation $conversation): RedirectResponse
     {
+        $conversation->removeMember($this->userId());
+
         return redirect()->route('chats.index');
     }
 
@@ -155,13 +152,13 @@ class ChatController extends Controller
             'conversations'  => $this->conversationsListFor($user),
             'users'          => $this->pickerUsersFor($user),
             'active'         => $active ? $this->threadPayloadFor($active, $user->id) : null,
-            'oversightRoles' => $this->settings()->roles['oversight'],
+            'oversightRoles' => Role::whereIn('id', $this->settings()->roles['oversight'])->pluck('name'),
         ]);
     }
 
     private function conversationsListFor(CraftableProUser $user)
     {
-        $base = $this->isOversight($user)
+        $base = $user->hasAnyRole($this->settings()->roles['oversight'])
             ? Conversation::query()
             : Conversation::forUser($user);
 
@@ -227,7 +224,7 @@ class ChatController extends Controller
             'type'     => $conversation->type,
             'members'  => $conversation->members->map(fn (CraftableProUser $m) => [
                 ...$m->only(['id', 'first_name', 'last_name']),
-                'is_staff'     => $this->isStaff($m),
+                'is_staff'     => $m->hasAnyRole($this->settings()->roles['staff']),
                 'last_read_at' => $m->pivot->last_read_at,
             ])->values(),
             'messages' => $conversation->messages()
@@ -260,22 +257,21 @@ class ChatController extends Controller
 
     private function markAsRead(Conversation $conversation): void
     {
-        $user   = $this->user();
-        $readAt = $conversation->markReadBy($user);
+        $userId = $this->userId();
+        $readAt = $conversation->markReadBy($userId);
 
-        // Only a real member's read counts as a receipt — tell the others live.
         if (! $readAt) {
             return;
         }
 
         $recipients = $conversation->audienceIds()
-            ->reject(fn (int $id) => $id === $user->id)
+            ->reject(fn (int $id) => $id === $userId)
             ->values()
             ->all();
 
         broadcast(new ConversationRead(
             $conversation->id,
-            $user->id,
+            $userId,
             $readAt->toIso8601String(),
             $recipients,
         ))->toOthers();

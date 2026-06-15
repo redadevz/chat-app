@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\DB;
 use Spatie\LaravelSettings\Migrations\SettingsMigration;
 
 return new class extends SettingsMigration
@@ -12,12 +13,12 @@ return new class extends SettingsMigration
         $this->migrator->add('chat.message_default_type', 'text');
 
         $this->migrator->add('chat.roles', [
-            'client'          => 'client',
-            'admin'           => 'Administrator',
-            'super_admin'     => 'super-admin',
-            'account_manager' => 'account-manager',
-            'staff'           => ['Administrator', 'super-admin', 'account-manager'],
-            'oversight'       => ['super-admin', 'Administrator'],
+            'client'          => $this->roleId('client'),
+            'admin'           => $this->roleId('Administrator'),
+            'super_admin'     => $this->roleId('super-admin'),
+            'account_manager' => $this->roleId('account-manager'),
+            'staff'           => $this->roleIds(['Administrator', 'super-admin', 'account-manager']),
+            'oversight'       => $this->roleIds(['super-admin', 'Administrator']),
         ]);
 
         $this->migrator->add('chat.visibility', [
@@ -42,5 +43,27 @@ return new class extends SettingsMigration
         $this->migrator->deleteIfExists('chat.roles');
         $this->migrator->deleteIfExists('chat.visibility');
         $this->migrator->deleteIfExists('chat.channels');
+    }
+
+    /** Resolve a craftable-pro role name to its id. */
+    private function roleId(string $name): ?int
+    {
+        return DB::table('roles')
+            ->where('name', $name)
+            ->where('guard_name', 'craftable-pro')
+            ->value('id');
+    }
+
+    /**
+     * @param  array<string>  $names
+     * @return array<int>
+     */
+    private function roleIds(array $names): array
+    {
+        return collect($names)
+            ->map(fn (string $name) => $this->roleId($name))
+            ->filter()
+            ->values()
+            ->all();
     }
 };
