@@ -16,12 +16,15 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Settings\ChatSettings;
 use Brackets\CraftablePro\Models\CraftableProUser;
+use Brackets\CraftablePro\Queries\Filters\FuzzyFilter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 use Spatie\Permission\Models\Role;
+use Spatie\QueryBuilder\AllowedFilter;
+use Spatie\QueryBuilder\QueryBuilder;
 
 class ChatController extends Controller
 {
@@ -136,7 +139,9 @@ class ChatController extends Controller
         return response()->json([
             'conversation_id' => $conversation->id,
             'support_user'    => $supportUser ? [
-                ...$this->basicUser($supportUser),
+                'id'           => $supportUser->id,
+                'first_name'   => $supportUser->first_name,
+                'last_name'    => $supportUser->last_name,
                 'last_read_at' => $supportUser->pivot->last_read_at
                     ? Carbon::parse($supportUser->pivot->last_read_at)->toIso8601String()
                     : null,
@@ -171,18 +176,33 @@ class ChatController extends Controller
 
     private function conversationsListFor(CraftableProUser $user)
     {
-        $query = $this->isOversight($user)
+        $base = $this->isOversight($user)
             ? Conversation::query()
             : Conversation::forUser($user);
 
-        return $query
+        return QueryBuilder::for($base)
+            ->allowedFilters([
+                AllowedFilter::custom('search', new FuzzyFilter('name', 'type')),
+            ])
+            ->defaultSort('-updated_at')
+            ->allowedSorts(['name', 'type', 'updated_at'])
             ->with([
                 'latestMessage',
                 'members:id,first_name,last_name',
             ])
-            ->latest('updated_at')
             ->get()
-            ->map(fn (Conversation $c) => $this->conversationSummary($c))
+            ->map(fn (Conversation $c) => [
+                'id'           => $c->id,
+                'name'         => $c->name,
+                'type'         => $c->type,
+                'updated_at'   => $c->updated_at?->toIso8601String(),
+                'last_message' => $c->latestMessage?->only(['id', 'body', 'created_at']),
+                'members'      => $c->members->map(fn (CraftableProUser $m) => [
+                    'id'         => $m->id,
+                    'first_name' => $m->first_name,
+                    'last_name'  => $m->last_name,
+                ])->values(),
+            ])
             ->values();
     }
 
@@ -196,7 +216,11 @@ class ChatController extends Controller
             ->select('id', 'first_name', 'last_name')
             ->orderBy('first_name')
             ->get()
-            ->map(fn (CraftableProUser $u) => $this->basicUser($u))
+            ->map(fn (CraftableProUser $u) => [
+                'id'         => $u->id,
+                'first_name' => $u->first_name,
+                'last_name'  => $u->last_name,
+            ])
             ->values();
     }
 
@@ -206,9 +230,11 @@ class ChatController extends Controller
             'id'       => $conversation->id,
             'name'     => $conversation->name,
             'type'     => $conversation->type,
-            'members'  => $conversation->members
-                ->map(fn (CraftableProUser $m) => $this->memberPayload($m))
-                ->values(),
+            'members'  => $conversation->members->map(fn (CraftableProUser $m) => [
+                ...$m->only(['id', 'first_name', 'last_name']),
+                'is_staff'     => $this->isStaff($m),
+                'last_read_at' => $m->pivot->last_read_at,
+            ])->values(),
             'messages' => $conversation->messages()
                 ->visibleTo($viewerId)
                 ->with([
@@ -219,64 +245,21 @@ class ChatController extends Controller
                 ])
                 ->oldest()
                 ->get()
-                ->map(fn (Message $m) => $this->messagePayload($m)),
-        ];
-    }
-
-    /** A conversation as it appears in the sidebar list. */
-    private function conversationSummary(Conversation $conversation): array
-    {
-        return [
-            'id'           => $conversation->id,
-            'name'         => $conversation->name,
-            'type'         => $conversation->type,
-            'updated_at'   => $conversation->updated_at?->toIso8601String(),
-            'last_message' => $conversation->latestMessage?->only(['id', 'body', 'created_at']),
-            'members'      => $conversation->members
-                ->map(fn (CraftableProUser $m) => $this->basicUser($m))
-                ->values(),
-        ];
-    }
-
-    /** A member inside an open thread: basic identity plus chat-specific flags. */
-    private function memberPayload(CraftableProUser $member): array
-    {
-        return [
-            ...$this->basicUser($member),
-            'is_staff'     => $this->isStaff($member),
-            'last_read_at' => $member->pivot->last_read_at,
-        ];
-    }
-
-    /** A single message as the thread view renders it. */
-    private function messagePayload(Message $message): array
-    {
-        return [
-            'id'            => $message->id,
-            'body'          => $message->body,
-            'user_id'       => $message->user_id,
-            'visibility'    => $message->visibility,
-            'reply_to_id'   => $message->reply_to_id,
-            'reply_to'      => $this->replyToPayload($message),
-            'private_to_id' => $message->private_to_id,
-            'recipient'     => $this->basicUser($message->recipient),
-            'created_at'    => $message->created_at?->toIso8601String(),
-            'sender'        => $this->basicUser($message->sender),
-        ];
-    }
-
-    private function replyToPayload(Message $message): ?array
-    {
-        $parent = $message->replyTo;
-
-        if (! $parent) {
-            return null;
-        }
-
-        return [
-            'id'     => $parent->id,
-            'body'   => $parent->body,
-            'sender' => $this->basicUser($parent->sender),
+                ->map(fn (Message $m) => [
+                    'id'            => $m->id,
+                    'body'          => $m->body,
+                    'user_id'       => $m->user_id,
+                    'visibility'    => $m->visibility,
+                    'reply_to_id'   => $m->reply_to_id,
+                    'reply_to'      => $m->replyTo ? [
+                        ...$m->replyTo->only(['id', 'body']),
+                        'sender' => $m->replyTo->sender?->only(['id', 'first_name', 'last_name']),
+                    ] : null,
+                    'private_to_id' => $m->private_to_id,
+                    'recipient'     => $m->recipient?->only(['id', 'first_name', 'last_name']),
+                    'created_at'    => $m->created_at?->toIso8601String(),
+                    'sender'        => $m->sender?->only(['id', 'first_name', 'last_name']),
+                ]),
         ];
     }
 
@@ -357,25 +340,5 @@ class ChatController extends Controller
             ->filter(fn (string $role) => $user->can("craftable-pro.chat.message-{$role}"))
             ->values()
             ->all();
-    }
-
-    /**
-     * The minimal user shape the chat UI needs everywhere. Returning plain arrays
-     * (rather than the model) keeps the appended avatar/media attributes from
-     * triggering an N+1 of media queries during serialization.
-     *
-     * @return ($user is null ? null : array{id: int, first_name: string, last_name: string})
-     */
-    private function basicUser(?CraftableProUser $user): ?array
-    {
-        if ($user === null) {
-            return null;
-        }
-
-        return [
-            'id'         => $user->id,
-            'first_name' => $user->first_name,
-            'last_name'  => $user->last_name,
-        ];
     }
 }
