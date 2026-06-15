@@ -182,14 +182,7 @@ class ChatController extends Controller
             ])
             ->latest('updated_at')
             ->get()
-            ->map(fn (Conversation $c) => [
-                'id'           => $c->id,
-                'name'         => $c->name,
-                'type'         => $c->type,
-                'updated_at'   => $c->updated_at?->toIso8601String(),
-                'last_message' => $c->latestMessage?->only(['id', 'body', 'created_at']),
-                'members'      => $c->members->map(fn (CraftableProUser $m) => $this->basicUser($m))->values(),
-            ])
+            ->map(fn (Conversation $c) => $this->conversationSummary($c))
             ->values();
     }
 
@@ -214,11 +207,7 @@ class ChatController extends Controller
             'name'     => $conversation->name,
             'type'     => $conversation->type,
             'members'  => $conversation->members
-                ->map(fn (CraftableProUser $m) => [
-                    ...$this->basicUser($m),
-                    'is_staff'     => $this->isStaff($m),
-                    'last_read_at' => $m->pivot->last_read_at,
-                ])
+                ->map(fn (CraftableProUser $m) => $this->memberPayload($m))
                 ->values(),
             'messages' => $conversation->messages()
                 ->visibleTo($viewerId)
@@ -230,18 +219,49 @@ class ChatController extends Controller
                 ])
                 ->oldest()
                 ->get()
-                ->map(fn (Message $m) => [
-                    'id'            => $m->id,
-                    'body'          => $m->body,
-                    'user_id'       => $m->user_id,
-                    'visibility'    => $m->visibility,
-                    'reply_to_id'   => $m->reply_to_id,
-                    'reply_to'      => $this->replyToPayload($m),
-                    'private_to_id' => $m->private_to_id,
-                    'recipient'     => $this->basicUser($m->recipient),
-                    'created_at'    => $m->created_at?->toIso8601String(),
-                    'sender'        => $this->basicUser($m->sender),
-                ]),
+                ->map(fn (Message $m) => $this->messagePayload($m)),
+        ];
+    }
+
+    /** A conversation as it appears in the sidebar list. */
+    private function conversationSummary(Conversation $conversation): array
+    {
+        return [
+            'id'           => $conversation->id,
+            'name'         => $conversation->name,
+            'type'         => $conversation->type,
+            'updated_at'   => $conversation->updated_at?->toIso8601String(),
+            'last_message' => $conversation->latestMessage?->only(['id', 'body', 'created_at']),
+            'members'      => $conversation->members
+                ->map(fn (CraftableProUser $m) => $this->basicUser($m))
+                ->values(),
+        ];
+    }
+
+    /** A member inside an open thread: basic identity plus chat-specific flags. */
+    private function memberPayload(CraftableProUser $member): array
+    {
+        return [
+            ...$this->basicUser($member),
+            'is_staff'     => $this->isStaff($member),
+            'last_read_at' => $member->pivot->last_read_at,
+        ];
+    }
+
+    /** A single message as the thread view renders it. */
+    private function messagePayload(Message $message): array
+    {
+        return [
+            'id'            => $message->id,
+            'body'          => $message->body,
+            'user_id'       => $message->user_id,
+            'visibility'    => $message->visibility,
+            'reply_to_id'   => $message->reply_to_id,
+            'reply_to'      => $this->replyToPayload($message),
+            'private_to_id' => $message->private_to_id,
+            'recipient'     => $this->basicUser($message->recipient),
+            'created_at'    => $message->created_at?->toIso8601String(),
+            'sender'        => $this->basicUser($message->sender),
         ];
     }
 
