@@ -19,6 +19,7 @@ use Brackets\CraftablePro\Models\CraftableProUser;
 use Brackets\CraftablePro\Queries\Filters\FuzzyFilter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -210,11 +211,21 @@ class ChatController extends Controller
     {
         $allowed = $this->allowedTargetRolesFor($user);
 
-        return CraftableProUser::query()
+        $base = CraftableProUser::query()
             ->where('id', '!=', $user->id)
             ->when($allowed !== ['*'], fn ($q) => $q->role($allowed))
-            ->select('id', 'first_name', 'last_name')
-            ->orderBy('first_name')
+            ->select('id', 'first_name', 'last_name');
+
+        // The picker reads its own `user_search` param so it doesn't clash with
+        // the conversation list's ?filter / ?sort in the same page request.
+        $request = new Request(['filter' => ['search' => request('user_search')]]);
+
+        return QueryBuilder::for($base, $request)
+            ->allowedFilters([
+                AllowedFilter::custom('search', new FuzzyFilter('first_name', 'last_name')),
+            ])
+            ->defaultSort('first_name')
+            ->allowedSorts(['first_name', 'last_name'])
             ->get()
             ->map(fn (CraftableProUser $u) => [
                 'id'         => $u->id,
