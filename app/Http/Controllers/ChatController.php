@@ -210,19 +210,21 @@ class ChatController extends Controller
             ->values();
     }
 
-    private function threadPayloadFor(Conversation $conversation, int $viewerId): array
+    private function threadPayloadFor(Conversation $conversation, int $user_id): array
     {
+        $staffRoles = $this->settings()->roles['staff'];
+
         return [
             'id'       => $conversation->id,
             'name'     => $conversation->name,
             'type'     => $conversation->type,
             'members'  => $conversation->members->map(fn (CraftableProUser $m) => [
                 ...$m->only(['id', 'first_name', 'last_name']),
-                'is_staff'     => $m->hasAnyRole($this->settings()->roles['staff']),
+                'is_staff'     => $m->hasAnyRole($staffRoles),
                 'last_read_at' => $m->pivot->last_read_at,
             ])->values(),
             'messages' => $conversation->messages()
-                ->visibleTo($viewerId)
+                ->visibleTo($user_id)
                 ->with([
                     'sender:id,first_name,last_name',
                     'replyTo:id,body,user_id',
