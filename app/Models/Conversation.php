@@ -92,13 +92,11 @@ class Conversation extends Model
         return $user->hasAnyRole(app(ChatSettings::class)->roles['staff']) && $this->isVisibleTo($user);
     }
 
-    /** Create a message here, applying the chat visibility rules. */
     public function postMessage(CraftableProUser $sender, array $data): Message
     {
         $settings   = app(ChatSettings::class);
         $visibility = $data['visibility'] ?? $settings->default_visibility;
 
-        // Only staff may post internal notes; anyone else is forced public.
         if ($visibility === $settings->visibility['internal'] && ! $sender->hasAnyRole($settings->roles['staff'])) {
             $visibility = $settings->visibility['public'];
         }
@@ -127,14 +125,12 @@ class Conversation extends Model
             : null;
     }
 
-    /** Remove a member from this conversation. */
     public function removeMember(int $userId): void
     {
         $this->members()->detach($userId);
     }
 
-    /** Everyone who may see this conversation live: its members plus oversight users. */
-    public function audienceIds(): Collection
+    public function audienceIds()
     {
         return $this->members
             ->pluck('id')
@@ -144,19 +140,13 @@ class Conversation extends Model
             ->values();
     }
 
-    /**
-     * Whose personal channel receives a freshly sent message. We pick the exact
-     * recipients so an unauthorized socket never receives it: a whisper reaches
-     * only its two parties, an internal note only the staff in the audience.
-     *
-     * @return array<int>
-     */
+
     public function recipientIdsFor(Message $message): array
     {
         if ($message->private_to_id !== null) {
             return array_values(array_unique([
-                (int) $message->user_id,
-                (int) $message->private_to_id,
+                $message->user_id,
+                $message->private_to_id,
             ]));
         }
 
