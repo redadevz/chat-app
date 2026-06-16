@@ -193,8 +193,6 @@ class ChatController extends Controller
             ->when($allowed !== ['*'], fn ($q) => $q->role($allowed))
             ->select('id', 'first_name', 'last_name');
 
-        // The picker reads its own `user_search` param so it doesn't clash with
-        // the conversation list's ?filter / ?sort in the same page request.
         $request = new Request(['filter' => ['search' => request('user_search')]]);
 
         return QueryBuilder::for($base, $request)

@@ -93,7 +93,6 @@ class Conversation extends Model
         return $user->hasAnyRole(app(ChatSettings::class)->roles['oversight']) || $this->hasMember($user);
     }
 
-    /** Who may read its internal (staff-only) notes. */
     public function isInternalVisibleTo(CraftableProUser $user): bool
     {
         return $user->hasAnyRole(app(ChatSettings::class)->roles['staff']) && $this->isVisibleTo($user);
