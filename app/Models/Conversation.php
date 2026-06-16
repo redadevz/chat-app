@@ -130,7 +130,8 @@ class Conversation extends Model
         $this->members()->detach($userId);
     }
 
-    public function audienceIds()
+    /** Everyone who may see this conversation live: its members plus oversight users. */
+    public function audienceIds(): Collection
     {
         return $this->members
             ->pluck('id')
@@ -145,8 +146,8 @@ class Conversation extends Model
     {
         if ($message->private_to_id !== null) {
             return array_values(array_unique([
-                $message->user_id,
-                $message->private_to_id,
+                (int) $message->user_id,
+                (int) $message->private_to_id,
             ]));
         }
 
@@ -210,7 +211,7 @@ class Conversation extends Model
 
     private static function nextAccountManager(): ?CraftableProUser
     {
-        return User::role(app(ChatSettings::class)->roles['account_manager'])
+        return CraftableProUser::role(app(ChatSettings::class)->roles['account_manager'])
             ->whereNull('craftable_pro_users.deleted_at')
             ->select('craftable_pro_users.*')
             ->selectSub(
