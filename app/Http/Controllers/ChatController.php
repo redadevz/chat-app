@@ -158,11 +158,7 @@ class ChatController extends Controller
 
     private function conversationsListFor(CraftableProUser $user)
     {
-        $base = $user->hasAnyRole($this->settings()->roles['oversight'])
-            ? Conversation::query()
-            : Conversation::forUser($user);
-
-        return QueryBuilder::for($base)
+        return QueryBuilder::for(Conversation::visibleTo($user))
             ->allowedFilters([
                 AllowedFilter::custom('search', new FuzzyFilter('name', 'type')),
             ])

@@ -76,6 +76,14 @@ class Conversation extends Model
         return $query->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $user->id));
     }
 
+    /** Conversations a user may list: oversight sees all, everyone else only their own. */
+    public function scopeVisibleTo(Builder $query, CraftableProUser $user): Builder
+    {
+        return $user->hasAnyRole(app(ChatSettings::class)->roles['oversight'])
+            ? $query
+            : $query->forUser($user);
+    }
+
     public function hasMember(CraftableProUser $user): bool
     {
         return $this->members()->where('craftable_pro_users.id', $user->id)->exists();
@@ -113,6 +121,22 @@ class Conversation extends Model
         $this->touch();
 
         return $message;
+    }
+
+    /**
+     * May $sender open or continue a private whisper to $recipientId here?
+     * Staff may always; everyone else only after the recipient whispered them first.
+     */
+    public function whisperAllowedFrom(CraftableProUser $sender, int $recipientId): bool
+    {
+        if ($sender->hasAnyRole(app(ChatSettings::class)->roles['staff'])) {
+            return true;
+        }
+
+        return $this->messages()
+            ->where('user_id', $recipientId)
+            ->where('private_to_id', $sender->id)
+            ->exists();
     }
 
     /** Record that the user has read up to now; returns the timestamp, or null if they aren't a member. */

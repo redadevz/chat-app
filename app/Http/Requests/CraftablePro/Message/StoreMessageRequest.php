@@ -53,14 +53,8 @@ class StoreMessageRequest extends FormRequest
 
             $user         = auth('craftable-pro')->user();
             $conversation = $this->route('conversation');
-            $staffRoles   = app(ChatSettings::class)->roles['staff'];
 
-            $whisperedFirst = $conversation->messages()
-                ->where('user_id', $id)
-                ->where('private_to_id', $user->id)
-                ->exists();
-
-            if (! $user->hasAnyRole($staffRoles) && ! $whisperedFirst) {
+            if (! $conversation->whisperAllowedFrom($user, (int) $id)) {
                 $validator->errors()->add(
                     'private_to_id',
                     'You may not privately message this member.',
@@ -71,7 +65,7 @@ class StoreMessageRequest extends FormRequest
 
             $recipient = CraftableProUser::find($id);
 
-            if (! $recipient || ! $recipient->hasAnyRole($staffRoles)) {
+            if (! $recipient || ! $recipient->hasAnyRole(app(ChatSettings::class)->roles['staff'])) {
                 $validator->errors()->add(
                     'private_to_id',
                     'You can only whisper staff members.',
