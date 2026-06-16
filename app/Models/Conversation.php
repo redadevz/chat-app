@@ -76,7 +76,6 @@ class Conversation extends Model
         return $query->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $user->id));
     }
 
-    /** Conversations a user may list: oversight sees all, everyone else only their own. */
     public function scopeVisibleTo(Builder $query, CraftableProUser $user): Builder
     {
         return $user->hasAnyRole(app(ChatSettings::class)->roles['oversight'])
