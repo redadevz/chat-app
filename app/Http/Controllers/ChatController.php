@@ -53,8 +53,6 @@ class ChatController extends Controller
     {
         $conversation->load('members.roles');
 
-        $this->markAsRead($conversation);
-
         return $this->render($conversation);
     }
 
@@ -111,7 +109,6 @@ class ChatController extends Controller
             return response()->json(['conversation_id' => null, 'support_user' => null, 'messages' => []]);
         }
 
-        $this->markAsRead($conversation);
 
         $supportUser = $conversation->members()
             ->role($this->settings()->roles['account_manager'])
@@ -249,28 +246,6 @@ class ChatController extends Controller
                     'sender'        => $m->sender?->only(['id', 'first_name', 'last_name']),
                 ]),
         ];
-    }
-
-    private function markAsRead(Conversation $conversation): void
-    {
-        $userId = $this->userId();
-        $readAt = $conversation->markReadBy($userId);
-
-        if (! $readAt) {
-            return;
-        }
-
-        $recipients = $conversation->audienceIds()
-            ->reject(fn (int $id) => $id === $userId)
-            ->values()
-            ->all();
-
-        broadcast(new ConversationRead(
-            $conversation->id,
-            $userId,
-            $readAt->toIso8601String(),
-            $recipients,
-        ))->toOthers();
     }
 
     private function allowedTargetRolesFor(CraftableProUser $user): array
