@@ -121,10 +121,6 @@ class Conversation extends Model
         return $message;
     }
 
-    /**
-     * May $sender open or continue a private whisper to $recipientId here?
-     * Staff may always; everyone else only after the recipient whispered them first.
-     */
     public function whisperAllowedFrom(CraftableProUser $sender, int $recipientId): bool
     {
         if ($sender->hasAnyRole(app(ChatSettings::class)->roles['staff'])) {
