@@ -55,9 +55,6 @@ class Conversation extends Model
 
     public function members(): BelongsToMany
     {
-        $settings  = app(ChatSettings::class);
-        $chatRoles = array_merge($settings->roles['staff'], [$settings->roles['client']]);
-
         return $this->belongsToMany(
             CraftableProUser::class,
             'conversation_members',
@@ -65,10 +62,7 @@ class Conversation extends Model
             'user_id',
         )
             ->withPivot('joined_at', 'last_read_at')
-            ->withTimestamps()
-            ->whereHas('roles', fn (Builder $q) => $q
-                ->where('guard_name', 'craftable-pro')
-                ->whereIn('id', $chatRoles));
+            ->withTimestamps();
     }
 
     public function scopeForUser(Builder $query, CraftableProUser $user): Builder
