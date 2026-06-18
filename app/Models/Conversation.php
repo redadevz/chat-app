@@ -65,9 +65,14 @@ class Conversation extends Model
             ->withTimestamps();
     }
 
+    public function scopeWhereMember(Builder $query, int $userId): Builder
+    {
+        return $query->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $userId));
+    }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
     public function scopeForUser(Builder $query, CraftableProUser $user): Builder
     {
-        return $query->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $user->id));
+        return $query->whereMember($user->id);
     }
 
     public function scopeVisibleTo(Builder $query, CraftableProUser $user): Builder
@@ -181,8 +186,8 @@ class Conversation extends Model
     {
         return $query
             ->where('type', 'private')
-            ->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $userA))
-            ->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $userB))
+            ->whereMember($userA)
+            ->whereMember($userB)
             ->has('members', '=', 2);
     }
 
@@ -205,7 +210,7 @@ class Conversation extends Model
         return DB::transaction(function () use ($client) {
             $existing = static::query()
                 ->where('type', 'private')
-                ->whereHas('members', fn (Builder $q) => $q->where('craftable_pro_users.id', $client->id))
+                ->whereMember($client->id)
                 ->whereHas('members', fn (Builder $q) => $q->role(app(ChatSettings::class)->roles['account_manager'])
                     ->where('craftable_pro_users.id', '!=', $client->id))
                 ->first();
